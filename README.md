@@ -4,8 +4,14 @@
 
 Proto filters provides a simple way to filter protobuf message based on field filter conditions.
 
+**Project status: *alpha***
 
-## Usage
+Not all planned features are completed.
+The API, spec, status and other user facing objects are subject to change.
+We do not support backward-compatibility for the alpha releases.
+
+
+## Overview
 
 The two message filtering types available follow the same pattern as `google.protobuf.FieldMask`:
 
@@ -86,3 +92,8 @@ message DurationFilter {
   }
 }
 ```
+
+## TODOs
+
+- [ ] support **and/or** conditions
+- [ ] support more languagesAD

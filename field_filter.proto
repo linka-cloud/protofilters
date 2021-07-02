@@ -29,12 +29,12 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
 message FieldsFilter {
-  // filters is a map of <field path, Filter>
+  // Filters is a map of <field path, Filter>
   map<string, Filter> filters = 1;
 }
 
 message FieldFilter {
-  // field is the field's path
+  // Field is the field's path
   string field = 1;
   Filter filter = 2;
 }
@@ -48,7 +48,7 @@ message Filter {
     TimeFilter time = 5;
     DurationFilter duration = 6;
   }
-  // not negates the match result
+  // Not negates the match result
   bool not = 7;
 }
 
