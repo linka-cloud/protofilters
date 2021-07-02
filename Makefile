@@ -12,15 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+MODULE = go.linka.cloud/protofilters
+
 PROTO_BASE_PATH = $(PWD)
 
 INCLUDE_PROTO_PATH = -I$(PROTO_BASE_PATH) \
-	-I $(shell go list -m -f {{.Dir}} google.golang.org/protobuf)
+	-I $(shell go list -m -f {{.Dir}} google.golang.org/protobuf) \
+	-I $(shell go list -m -f {{.Dir}} github.com/envoyproxy/protoc-gen-validate)
 
 
 .PHONY: proto
-proto:
+proto: gen-proto lint
+
+.PHONY: gen-proto
+gen-proto:
 	@find $(PROTO_BASE_PATH) -name '*.proto' -type f -exec \
     	protoc $(INCLUDE_PROTO_PATH) --go_out=paths=source_relative:. {} \;
-	@go fmt ./...
 
+.PHONY: lint
+lint:
+	@goimports -w -local $(MODULE) $(PWD)
+	@gofmt -w $(PWD)

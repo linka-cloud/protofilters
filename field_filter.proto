@@ -29,7 +29,6 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
 message FieldsFilter {
-  // The set of field mask paths.
   map<string, Filter> filters = 1;
 }
 
@@ -61,6 +60,7 @@ message StringFilter {
   bool not = 4;
   bool case_insensitive = 5;
 }
+
 message NumberFilter {
   message In {
     repeated double values = 1;
@@ -73,12 +73,15 @@ message NumberFilter {
   }
   bool not = 5;
 }
+
 message NullFilter {
   bool not = 1;
 }
+
 message BoolFilter {
   bool equals = 1;
 }
+
 message TimeFilter {
   oneof condition {
     google.protobuf.Timestamp equals = 1;

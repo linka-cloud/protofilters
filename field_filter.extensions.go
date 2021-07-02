@@ -17,6 +17,8 @@
 package protofilters
 
 import (
+	"regexp"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -326,4 +328,121 @@ func newTimeFilter(f *TimeFilter) *Filter {
 			Time: f,
 		},
 	}
+}
+
+func (x *StringFilter) Match(v *string) (bool, error) {
+	if v == nil {
+		return x.GetNot(), nil
+	}
+	value := *v
+	insensitive := x.GetCaseInsensitive()
+	var match bool
+	switch x.GetCondition().(type) {
+	case *StringFilter_Equals:
+		if insensitive {
+			match = strings.ToLower(x.GetEquals()) == strings.ToLower(value)
+		} else {
+			match = value == x.GetEquals()
+		}
+	case *StringFilter_Regex:
+		reg, err := regexp.Compile(x.GetRegex())
+		if err != nil {
+			return false, err
+		}
+		match = reg.MatchString(value)
+	case *StringFilter_In_:
+	lookup:
+		for _, v := range x.GetIn().GetValues() {
+			if (insensitive && strings.ToLower(v) == strings.ToLower(value)) || v == value {
+				match = true
+				break lookup
+			}
+		}
+	}
+	if x.GetNot() {
+		return !match, nil
+	}
+	return match, nil
+}
+
+func (x *NumberFilter) Match(v *float64) (bool, error) {
+	if v == nil {
+		return x.GetNot(), nil
+	}
+	val := *v
+	var match bool
+	switch x.GetCondition().(type) {
+	case *NumberFilter_Equals:
+		match = val == x.GetEquals()
+	case *NumberFilter_Inf:
+		match = val < x.GetInf()
+	case *NumberFilter_Sup:
+		match = val > x.GetSup()
+	case *NumberFilter_In_:
+	lookup:
+		for _, v := range x.GetIn().GetValues() {
+			if val == v {
+				match = true
+				break lookup
+			}
+		}
+	}
+	if x.GetNot() {
+		return !match, nil
+	}
+	return match, nil
+}
+
+func (x *BoolFilter) Match(v *bool) (bool, error) {
+	if v == nil {
+		return false, nil
+	}
+	return *v == x.GetEquals(), nil
+}
+
+func (x *NullFilter) Match(v interface{}) (bool, error) {
+	if x.GetNot() {
+		return v != nil, nil
+	}
+	return v == nil, nil
+}
+
+func (x *TimeFilter) Match(v *timestamppb.Timestamp) (bool, error) {
+	if v == nil {
+		return x.GetNot(), nil
+	}
+	t1 := v.AsTime()
+	var match bool
+	switch x.GetCondition().(type) {
+	case *TimeFilter_Equals:
+		match = t1.Equal(x.GetEquals().AsTime().UTC())
+	case *TimeFilter_Before:
+		match = t1.Before(x.GetBefore().AsTime().UTC())
+	case *TimeFilter_After:
+		match = t1.After(x.GetAfter().AsTime().UTC())
+	}
+	if x.GetNot() {
+		return !match, nil
+	}
+	return match, nil
+}
+
+func (x *DurationFilter) Match(v *durationpb.Duration) (bool, error) {
+	if v == nil {
+		return x.GetNot(), nil
+	}
+	d1 := v.AsDuration()
+	var match bool
+	switch x.GetCondition().(type) {
+	case *DurationFilter_Equals:
+		match = d1 == x.GetEquals().AsDuration()
+	case *DurationFilter_Inf:
+		match = d1 < x.GetInf().AsDuration()
+	case *DurationFilter_Sup:
+		match = d1 > x.GetSup().AsDuration()
+	}
+	if x.GetNot() {
+		return !match, nil
+	}
+	return match, nil
 }

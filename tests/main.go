@@ -18,10 +18,12 @@ package main
 
 import (
 	"io/ioutil"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
+	pref "google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
@@ -29,49 +31,96 @@ import (
 
 	ff "go.linka.cloud/protofilters"
 	"go.linka.cloud/protofilters/matcher"
-	"go.linka.cloud/protofilters/tests/gen"
 )
 
-func main() {
-	gen.Gen()
-	b, err := ioutil.ReadFile("test.file-descriptor.bin")
-	if err != nil {
-		logrus.Fatal(err)
+type registry struct {
+	m  map[pref.FullName]pref.MessageDescriptor
+	mu sync.RWMutex
+}
+
+func (r *registry) Import(b []byte, allowUnResolved ...bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.m == nil {
+		r.m = make(map[pref.FullName]pref.MessageDescriptor)
 	}
 	var fdp descriptorpb.FileDescriptorProto
 	if err := proto.Unmarshal(b, &fdp); err != nil {
 		logrus.Fatal(err)
 	}
-	fd, err := protodesc.NewFile(&fdp, protoregistry.GlobalFiles)
+	opts := &protodesc.FileOptions{
+		AllowUnresolvable: len(allowUnResolved) > 0 && allowUnResolved[0],
+	}
+	fd, err := opts.New(&fdp, protoregistry.GlobalFiles)
+	if err != nil {
+		return err
+	}
+	msgs := fd.Messages()
+	for i := 0; i < msgs.Len(); i++ {
+		m := msgs.Get(i)
+		r.m[m.FullName()] = m
+	}
+	return nil
+}
+
+func (r *registry) UnmarshalAny(a *anypb.Any) (*dynamicpb.Message, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.m == nil {
+		return nil, protoregistry.NotFound
+	}
+	d, ok := r.m[a.MessageName()]
+	if !ok {
+		return nil, protoregistry.NotFound
+	}
+	m := dynamicpb.NewMessage(d)
+	if err := anypb.UnmarshalTo(a, m, proto.UnmarshalOptions{}); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (r *registry) Unmarshal(b []byte) (*dynamicpb.Message, error) {
+	var a anypb.Any
+	if err := proto.Unmarshal(b, &a); err != nil {
+		return nil, err
+	}
+	return r.UnmarshalAny(&a)
+}
+
+func main() {
+	b, err := ioutil.ReadFile("test.file-descriptor.bin")
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	// protodesc.NewFile(d.)
-	d := dynamicpb.NewMessage(fd.Messages().Get(0))
+	reg := &registry{}
+	if err := reg.Import(b, true); err != nil {
+		logrus.Fatal(err)
+	}
 	b, err = ioutil.ReadFile("test.bin")
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	a := anypb.Any{}
-	if err := proto.Unmarshal(b, &a); err != nil {
+	d, err := reg.Unmarshal(b)
+	if err != nil {
 		logrus.Fatal(err)
 	}
-	if err := anypb.UnmarshalTo(&a, d, proto.UnmarshalOptions{}); err != nil {
-		logrus.Fatal(err)
-	}
-	logrus.Infof("%+v", d)
-	logrus.Info(d.ProtoReflect().Descriptor().FullName())
+	d.Range(func(d pref.FieldDescriptor, v pref.Value) bool {
+		i := v.Interface()
+		_ = i
+
+		return true
+	})
 	filter := &ff.FieldFilter{
-		Field: "string_field",
-		// Filter: ff.StringRegex(".*....*"),
-		Filter: ff.StringIN("", "whatever..."),
+		Field:  "string_value_field",
+		Filter: ff.StringIN("", "..."),
 	}
 	ok, err := matcher.MatchFilters(d, filter)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 	if !ok {
-		logrus.Fatal("reg ex not found")
+		logrus.Fatal("not found")
 	}
 	logrus.Infof("%v match %v", d, filter)
 }
