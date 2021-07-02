@@ -25,8 +25,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// Filters is a map containing field path associated to a Filter
 type Filters map[string]*Filter
 
+// New constructs a *FieldsField based on the provided *FieldFilter slice
 func New(filters ...*FieldFilter) *FieldsFilter {
 	out := make(map[string]*Filter)
 	for _, v := range filters {
@@ -38,6 +40,7 @@ func New(filters ...*FieldFilter) *FieldsFilter {
 	return &FieldsFilter{Filters: out}
 }
 
+// StringEquals constructs a string equals filter
 func StringEquals(s string) *Filter {
 	return newStringFilter(&StringFilter{
 		Condition: &StringFilter_Equals{
@@ -46,6 +49,7 @@ func StringEquals(s string) *Filter {
 	})
 }
 
+// StringNotEquals constructs a string not equals filter
 func StringNotEquals(s string) *Filter {
 	return newStringFilter(
 		&StringFilter{
@@ -57,6 +61,7 @@ func StringNotEquals(s string) *Filter {
 	)
 }
 
+// StringNotIEquals constructs a case insensitive string not equals filter
 func StringNotIEquals(s string) *Filter {
 	return newStringFilter(
 		&StringFilter{
@@ -69,6 +74,7 @@ func StringNotIEquals(s string) *Filter {
 	)
 }
 
+// StringIEquals constructs a case insensitive string equals filter
 func StringIEquals(s string) *Filter {
 	return newStringFilter(&StringFilter{
 		Condition: &StringFilter_Equals{
@@ -78,6 +84,7 @@ func StringIEquals(s string) *Filter {
 	})
 }
 
+// StringRegex constructs a string match regex filter
 func StringRegex(s string) *Filter {
 	return newStringFilter(
 		&StringFilter{
@@ -88,6 +95,7 @@ func StringRegex(s string) *Filter {
 	)
 }
 
+// StringNotRegex constructs a string not match regex filter
 func StringNotRegex(s string) *Filter {
 	return newStringFilter(
 		&StringFilter{
@@ -108,6 +116,7 @@ func newStringFilter(f *StringFilter, not ...bool) *Filter {
 	}
 }
 
+// StringIN constructs a string in slice filter
 func StringIN(s ...string) *Filter {
 	return newStringFilter(
 		&StringFilter{
@@ -119,6 +128,7 @@ func StringIN(s ...string) *Filter {
 		})
 }
 
+// StringNotIN constructs a string not in slice filter
 func StringNotIN(s ...string) *Filter {
 	return newStringFilter(
 		&StringFilter{
@@ -140,6 +150,7 @@ func newNumberFilter(f *NumberFilter, not ...bool) *Filter {
 	}
 }
 
+// NumberEquals constructs a number equals filter
 func NumberEquals(n float64) *Filter {
 	return newNumberFilter(
 		&NumberFilter{
@@ -150,17 +161,7 @@ func NumberEquals(n float64) *Filter {
 	)
 }
 
-func NumberNotEquals(n float64) *Filter {
-	return newNumberFilter(
-		&NumberFilter{
-			Condition: &NumberFilter_Equals{
-				Equals: n,
-			},
-		},
-		true,
-	)
-}
-
+// NumberInf constructs a number inferior filter
 func NumberInf(n float64) *Filter {
 	return newNumberFilter(
 		&NumberFilter{
@@ -171,6 +172,7 @@ func NumberInf(n float64) *Filter {
 	)
 }
 
+// NumberSup constructs a number superior filter
 func NumberSup(n float64) *Filter {
 	return newNumberFilter(
 		&NumberFilter{
@@ -181,6 +183,7 @@ func NumberSup(n float64) *Filter {
 	)
 }
 
+// NumberIN constructs a number in slice filter
 func NumberIN(n ...float64) *Filter {
 	return newNumberFilter(
 		&NumberFilter{
@@ -193,6 +196,7 @@ func NumberIN(n ...float64) *Filter {
 	)
 }
 
+// NumberNotIN constructs a number not in slice filter
 func NumberNotIN(n ...float64) *Filter {
 	return newNumberFilter(
 		&NumberFilter{
@@ -206,10 +210,12 @@ func NumberNotIN(n ...float64) *Filter {
 	)
 }
 
+// True constructs a bool is true filter
 func True() *Filter {
 	return newBoolFilter(&BoolFilter{Equals: true})
 }
 
+// False constructs a bool is false filter
 func False() *Filter {
 	return newBoolFilter(&BoolFilter{Equals: false})
 }
@@ -223,10 +229,12 @@ func newBoolFilter(f *BoolFilter, not ...bool) *Filter {
 	}
 }
 
+// Null constructs a null check filter
 func Null() *Filter {
 	return newNullFilter(&NullFilter{})
 }
 
+// NotNull constructs a not null check filter
 func NotNull() *Filter {
 	return newNullFilter(&NullFilter{}, true)
 }
@@ -240,6 +248,7 @@ func newNullFilter(f *NullFilter, not ...bool) *Filter {
 	}
 }
 
+// DurationEquals constructs a duration equals filter
 func DurationEquals(d time.Duration) *Filter {
 	return newDurationFilter(
 		&DurationFilter{
@@ -250,6 +259,7 @@ func DurationEquals(d time.Duration) *Filter {
 	)
 }
 
+// DurationNotEquals constructs a duration not equals filter
 func DurationNotEquals(d time.Duration) *Filter {
 	return newDurationFilter(
 		&DurationFilter{
@@ -261,6 +271,7 @@ func DurationNotEquals(d time.Duration) *Filter {
 	)
 }
 
+// DurationSup constructs a duration superior filter
 func DurationSup(d time.Duration) *Filter {
 	return newDurationFilter(
 		&DurationFilter{
@@ -271,6 +282,7 @@ func DurationSup(d time.Duration) *Filter {
 	)
 }
 
+// DurationInf constructs a duration inferior filter
 func DurationInf(d time.Duration) *Filter {
 	return newDurationFilter(
 		&DurationFilter{
@@ -290,6 +302,7 @@ func newDurationFilter(f *DurationFilter, not ...bool) *Filter {
 	}
 }
 
+// TimeEquals constructs a time equals filter
 func TimeEquals(t time.Time) *Filter {
 	return newTimeFilter(
 		&TimeFilter{
@@ -300,6 +313,7 @@ func TimeEquals(t time.Time) *Filter {
 	)
 }
 
+// TimeNotEquals constructs a time not equals filter
 func TimeNotEquals(t time.Time) *Filter {
 	return newTimeFilter(
 		&TimeFilter{
@@ -311,6 +325,7 @@ func TimeNotEquals(t time.Time) *Filter {
 	)
 }
 
+// TimeAfter constructs a time after filter
 func TimeAfter(t time.Time) *Filter {
 	return newTimeFilter(
 		&TimeFilter{
@@ -321,6 +336,7 @@ func TimeAfter(t time.Time) *Filter {
 	)
 }
 
+// TimeBefore constructs a time before filter
 func TimeBefore(t time.Time) *Filter {
 	return newTimeFilter(
 		&TimeFilter{
@@ -340,6 +356,7 @@ func newTimeFilter(f *TimeFilter, not ...bool) *Filter {
 	}
 }
 
+// Match applies the filter against the provided string pointer
 func (x *StringFilter) Match(v *string) (bool, error) {
 	if v == nil {
 		return false, nil
@@ -368,6 +385,7 @@ func (x *StringFilter) Match(v *string) (bool, error) {
 	return false, nil
 }
 
+// Match applies the filter against the provided number pointer
 func (x *NumberFilter) Match(v *float64) (bool, error) {
 	if v == nil {
 		return false, nil
@@ -390,6 +408,7 @@ func (x *NumberFilter) Match(v *float64) (bool, error) {
 	return false, nil
 }
 
+// Match applies the filter against the provided bool pointer
 func (x *BoolFilter) Match(v *bool) (bool, error) {
 	if v == nil {
 		return false, nil
@@ -397,10 +416,12 @@ func (x *BoolFilter) Match(v *bool) (bool, error) {
 	return *v == x.GetEquals(), nil
 }
 
+// Match applies the filter against the provided message
 func (x *NullFilter) Match(v interface{}) (bool, error) {
 	return v == nil, nil
 }
 
+// Match applies the filter against the provided Timestamp pointer
 func (x *TimeFilter) Match(v *timestamppb.Timestamp) (bool, error) {
 	if v == nil {
 		return false, nil
@@ -417,6 +438,7 @@ func (x *TimeFilter) Match(v *timestamppb.Timestamp) (bool, error) {
 	return false, nil
 }
 
+// Match applies the filter against the provided Duration pointer
 func (x *DurationFilter) Match(v *durationpb.Duration) (bool, error) {
 	if v == nil {
 		return false, nil

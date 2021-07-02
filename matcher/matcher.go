@@ -28,8 +28,10 @@ import (
 	pf "go.linka.cloud/protofilters"
 )
 
+// WKType represents a google.protobuf well-known type
 type WKType string
 
+// String implements the Stringer interface
 func (t WKType) String() string {
 	return string(t)
 }
@@ -48,22 +50,31 @@ const (
 	BytesValue  WKType = "google.protobuf.BytesValue"
 )
 
+// Matcher provides a way to match proto.Message against protofilters.Filter
 type Matcher interface {
+	// Match matches to proto.Message against the protofilters.FieldsFilter
+	// It returns an error if one of the field path or FieldFilter is invalid
 	Match(m proto.Message, f *pf.FieldsFilter) (bool, error)
+	// MatchFilters matches to proto.Message against the protofilters.FieldFilter slice
+	// It returns an error if one of the field path or FieldFilter is invalid
 	MatchFilters(m proto.Message, fs ...*pf.FieldFilter) (bool, error)
 }
 
+// CachingMatcher is a Matcher that cache messages field path lookup results
 type CachingMatcher interface {
 	Matcher
+	// Clear clears the lookup cache
 	Clear()
 }
 
 var defaultMatcher CachingMatcher = &matcher{cache: make(map[string]pref.FieldDescriptor)}
 
+// Match is a convenient method calling Match on the defaultMatcher
 func Match(msg proto.Message, f *pf.FieldsFilter) (bool, error) {
 	return defaultMatcher.Match(msg, f)
 }
 
+// MatchFilters is a convenient calling MatchFilters on the defaultMatcher
 func MatchFilters(msg proto.Message, fs ...*pf.FieldFilter) (bool, error) {
 	return defaultMatcher.MatchFilters(msg, fs...)
 }

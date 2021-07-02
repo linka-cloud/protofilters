@@ -1,44 +1,28 @@
-// Copyright 2021 Linka Cloud  All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+# Proto Filters
 
-syntax = "proto3";
+[![Go Reference](https://pkg.go.dev/badge/go.linka.cloud/protofilters.svg)](https://pkg.go.dev/go.linka.cloud/protofilters)
 
-package linka.cloud.protofilters;
-
-option csharp_namespace = "LinkaCloud.ProtoFilters";
-option java_package = "cloud.linka.protofilters";
-option java_outer_classname = "ProtoFilters";
-option java_multiple_files = true;
-option objc_class_prefix = "LKPF";
-option go_package = "go.linka.cloud/protofilters;protofilters";
-option cc_enable_arenas = true;
+Proto filters provides a simple way to filter protobuf message based on field filter conditions.
 
 
-import "google/protobuf/timestamp.proto";
-import "google/protobuf/duration.proto";
+## Usage
 
+The two message filtering types available follow the same pattern as `google.protobuf.FieldMask`:
+
+```proto
 message FieldsFilter {
   // filters is a map of <field path, Filter>
   map<string, Filter> filters = 1;
 }
-
 message FieldFilter {
-  // field is the field's path
-  string field = 1;
-  Filter filter = 2;
+    string field = 1;
+    Filter filter = 2;
 }
+```
 
+The message's Field is selected by its path and compared against the provided typed filter:
+
+```proto
 message Filter {
   oneof match {
     StringFilter string = 1;
@@ -51,7 +35,11 @@ message Filter {
   // not negates the match result
   bool not = 7;
 }
+```
 
+The typed filters are the following:
+
+```proto
 message StringFilter {
   message In {
     repeated string values = 1;
@@ -97,3 +85,4 @@ message DurationFilter {
     google.protobuf.Duration inf = 3;
   }
 }
+```
