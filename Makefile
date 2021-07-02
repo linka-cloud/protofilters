@@ -33,3 +33,7 @@ gen-proto:
 lint:
 	@goimports -w -local $(MODULE) $(PWD)
 	@gofmt -w $(PWD)
+
+.PHONY: tests
+tests: proto
+	@go test -v ./...

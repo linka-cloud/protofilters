@@ -85,13 +85,27 @@ func (m *matcher) Match(msg proto.Message, f *pf.FieldsFilter) (bool, error) {
 		if err != nil {
 			return false, err
 		}
+		rval := msg.ProtoReflect().Get(fd)
 		if fd.IsList() {
-			return false, errors.New("matching against list is not supported")
+			list := rval.List()
+			for i := 0; i < list.Len(); i++ {
+				match, err := match(list.Get(i), fd, filter)
+				if err != nil {
+					return false, err
+				}
+				if filter.GetNot() && !match {
+					return false, nil
+				}
+				if !filter.GetNot() && match {
+					return true, nil
+				}
+			}
+			return false, nil
 		}
 		if fd.IsMap() {
 			return false, errors.New("matching against map is not supported")
 		}
-		ok, err := match(msg, fd, filter)
+		ok, err := match(rval, fd, filter)
 		if err != nil {
 			return false, err
 		}

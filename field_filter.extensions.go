@@ -47,22 +47,26 @@ func StringEquals(s string) *Filter {
 }
 
 func StringNotEquals(s string) *Filter {
-	return newStringFilter(&StringFilter{
-		Condition: &StringFilter_Equals{
-			Equals: s,
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_Equals{
+				Equals: s,
+			},
 		},
-		Not: true,
-	})
+		true,
+	)
 }
 
 func StringNotIEquals(s string) *Filter {
-	return newStringFilter(&StringFilter{
-		Condition: &StringFilter_Equals{
-			Equals: s,
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_Equals{
+				Equals: s,
+			},
+			CaseInsensitive: true,
 		},
-		CaseInsensitive: true,
-		Not:             true,
-	})
+		true,
+	)
 }
 
 func StringIEquals(s string) *Filter {
@@ -90,16 +94,17 @@ func StringNotRegex(s string) *Filter {
 			Condition: &StringFilter_Regex{
 				Regex: s,
 			},
-			Not: true,
 		},
+		true,
 	)
 }
 
-func newStringFilter(f *StringFilter) *Filter {
+func newStringFilter(f *StringFilter, not ...bool) *Filter {
 	return &Filter{
 		Match: &Filter_String_{
 			String_: f,
 		},
+		Not: len(not) > 0 && not[0],
 	}
 }
 
@@ -122,15 +127,16 @@ func StringNotIN(s ...string) *Filter {
 					Values: s,
 				},
 			},
-			Not: true,
-		})
+		},
+		true)
 }
 
-func newNumberFilter(f *NumberFilter) *Filter {
+func newNumberFilter(f *NumberFilter, not ...bool) *Filter {
 	return &Filter{
 		Match: &Filter_Number{
 			Number: f,
 		},
+		Not: len(not) > 0 && not[0],
 	}
 }
 
@@ -150,8 +156,8 @@ func NumberNotEquals(n float64) *Filter {
 			Condition: &NumberFilter_Equals{
 				Equals: n,
 			},
-			Not: true,
 		},
+		true,
 	)
 }
 
@@ -195,8 +201,8 @@ func NumberNotIN(n ...float64) *Filter {
 					Values: n,
 				},
 			},
-			Not: true,
 		},
+		true,
 	)
 }
 
@@ -208,27 +214,29 @@ func False() *Filter {
 	return newBoolFilter(&BoolFilter{Equals: false})
 }
 
-func newBoolFilter(f *BoolFilter) *Filter {
+func newBoolFilter(f *BoolFilter, not ...bool) *Filter {
 	return &Filter{
 		Match: &Filter_Bool{
 			Bool: f,
 		},
+		Not: len(not) > 0 && not[0],
 	}
 }
 
 func Null() *Filter {
-	return newNullFilter(&NullFilter{Not: false})
+	return newNullFilter(&NullFilter{})
 }
 
 func NotNull() *Filter {
-	return newNullFilter(&NullFilter{Not: true})
+	return newNullFilter(&NullFilter{}, true)
 }
 
-func newNullFilter(f *NullFilter) *Filter {
+func newNullFilter(f *NullFilter, not ...bool) *Filter {
 	return &Filter{
 		Match: &Filter_Null{
 			Null: f,
 		},
+		Not: len(not) > 0 && not[0],
 	}
 }
 
@@ -248,8 +256,8 @@ func DurationNotEquals(d time.Duration) *Filter {
 			Condition: &DurationFilter_Equals{
 				Equals: durationpb.New(d),
 			},
-			Not: true,
 		},
+		true,
 	)
 }
 
@@ -273,11 +281,12 @@ func DurationInf(d time.Duration) *Filter {
 	)
 }
 
-func newDurationFilter(f *DurationFilter) *Filter {
+func newDurationFilter(f *DurationFilter, not ...bool) *Filter {
 	return &Filter{
 		Match: &Filter_Duration{
 			Duration: f,
 		},
+		Not: len(not) > 0 && not[0],
 	}
 }
 
@@ -297,8 +306,8 @@ func TimeNotEquals(t time.Time) *Filter {
 			Condition: &TimeFilter_Equals{
 				Equals: timestamppb.New(t),
 			},
-			Not: true,
 		},
+		true,
 	)
 }
 
@@ -322,75 +331,63 @@ func TimeBefore(t time.Time) *Filter {
 	)
 }
 
-func newTimeFilter(f *TimeFilter) *Filter {
+func newTimeFilter(f *TimeFilter, not ...bool) *Filter {
 	return &Filter{
 		Match: &Filter_Time{
 			Time: f,
 		},
+		Not: len(not) > 0 && not[0],
 	}
 }
 
 func (x *StringFilter) Match(v *string) (bool, error) {
 	if v == nil {
-		return x.GetNot(), nil
+		return false, nil
 	}
 	value := *v
 	insensitive := x.GetCaseInsensitive()
-	var match bool
 	switch x.GetCondition().(type) {
 	case *StringFilter_Equals:
 		if insensitive {
-			match = strings.ToLower(x.GetEquals()) == strings.ToLower(value)
-		} else {
-			match = value == x.GetEquals()
+			return strings.ToLower(x.GetEquals()) == strings.ToLower(value), nil
 		}
+		return value == x.GetEquals(), nil
 	case *StringFilter_Regex:
 		reg, err := regexp.Compile(x.GetRegex())
 		if err != nil {
 			return false, err
 		}
-		match = reg.MatchString(value)
+		return reg.MatchString(value), nil
 	case *StringFilter_In_:
-	lookup:
 		for _, v := range x.GetIn().GetValues() {
 			if (insensitive && strings.ToLower(v) == strings.ToLower(value)) || v == value {
-				match = true
-				break lookup
+				return true, nil
 			}
 		}
 	}
-	if x.GetNot() {
-		return !match, nil
-	}
-	return match, nil
+	return false, nil
 }
 
 func (x *NumberFilter) Match(v *float64) (bool, error) {
 	if v == nil {
-		return x.GetNot(), nil
+		return false, nil
 	}
 	val := *v
-	var match bool
 	switch x.GetCondition().(type) {
 	case *NumberFilter_Equals:
-		match = val == x.GetEquals()
+		return val == x.GetEquals(), nil
 	case *NumberFilter_Inf:
-		match = val < x.GetInf()
+		return val < x.GetInf(), nil
 	case *NumberFilter_Sup:
-		match = val > x.GetSup()
+		return val > x.GetSup(), nil
 	case *NumberFilter_In_:
-	lookup:
 		for _, v := range x.GetIn().GetValues() {
 			if val == v {
-				match = true
-				break lookup
+				return true, nil
 			}
 		}
 	}
-	if x.GetNot() {
-		return !match, nil
-	}
-	return match, nil
+	return false, nil
 }
 
 func (x *BoolFilter) Match(v *bool) (bool, error) {
@@ -401,48 +398,37 @@ func (x *BoolFilter) Match(v *bool) (bool, error) {
 }
 
 func (x *NullFilter) Match(v interface{}) (bool, error) {
-	if x.GetNot() {
-		return v != nil, nil
-	}
 	return v == nil, nil
 }
 
 func (x *TimeFilter) Match(v *timestamppb.Timestamp) (bool, error) {
 	if v == nil {
-		return x.GetNot(), nil
+		return false, nil
 	}
 	t1 := v.AsTime()
-	var match bool
 	switch x.GetCondition().(type) {
 	case *TimeFilter_Equals:
-		match = t1.Equal(x.GetEquals().AsTime().UTC())
+		return t1.Equal(x.GetEquals().AsTime().UTC()), nil
 	case *TimeFilter_Before:
-		match = t1.Before(x.GetBefore().AsTime().UTC())
+		return t1.Before(x.GetBefore().AsTime().UTC()), nil
 	case *TimeFilter_After:
-		match = t1.After(x.GetAfter().AsTime().UTC())
+		return t1.After(x.GetAfter().AsTime().UTC()), nil
 	}
-	if x.GetNot() {
-		return !match, nil
-	}
-	return match, nil
+	return false, nil
 }
 
 func (x *DurationFilter) Match(v *durationpb.Duration) (bool, error) {
 	if v == nil {
-		return x.GetNot(), nil
+		return false, nil
 	}
 	d1 := v.AsDuration()
-	var match bool
 	switch x.GetCondition().(type) {
 	case *DurationFilter_Equals:
-		match = d1 == x.GetEquals().AsDuration()
+		return d1 == x.GetEquals().AsDuration(), nil
 	case *DurationFilter_Inf:
-		match = d1 < x.GetInf().AsDuration()
+		return d1 < x.GetInf().AsDuration(), nil
 	case *DurationFilter_Sup:
-		match = d1 > x.GetSup().AsDuration()
+		return d1 > x.GetSup().AsDuration(), nil
 	}
-	if x.GetNot() {
-		return !match, nil
-	}
-	return match, nil
+	return false, nil
 }

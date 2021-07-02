@@ -27,36 +27,32 @@ import (
 	pf "go.linka.cloud/protofilters"
 )
 
-func match(msg proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func match(val pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
 	switch f.GetMatch().(type) {
 	case *pf.Filter_String_:
-		return matchString(msg, fd, f)
+		return matchString(val, fd, f)
 	case *pf.Filter_Number:
-		return matchNumber(msg, fd, f)
+		return matchNumber(val, fd, f)
 	case *pf.Filter_Bool:
-		return matchBool(msg, fd, f)
+		return matchBool(val, fd, f)
 	case *pf.Filter_Null:
-		return matchNull(msg, fd, f)
+		return matchNull(val, fd, f)
 	case *pf.Filter_Time:
-		return matchTime(msg, fd, f)
+		return matchTime(val, fd, f)
 	case *pf.Filter_Duration:
-		return matchDuration(msg, fd, f)
+		return matchDuration(val, fd, f)
 	}
 	return false, nil
 }
 
-func matchString(m proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
-	rval := m.ProtoReflect().Get(fd)
+func matchString(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
 	var value *string
 	if fd.Kind() != pref.StringKind && fd.Kind() != pref.EnumKind {
 		if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != StringValue {
 			return false, fmt.Errorf("cannot use string filter on %s", fd.Kind().String())
 		}
 		// return early as the condition will always be false
-		if !m.ProtoReflect().Has(fd) {
-			if f.GetString_().GetNot() {
-				return true, nil
-			}
+		if !rval.IsValid() {
 			return false, nil
 		}
 		value = proto.String(rval.Message().Get(fd.Message().Fields().Get(0)).String())
@@ -70,11 +66,11 @@ func matchString(m proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, 
 	} else if value == nil {
 		value = proto.String(rval.String())
 	}
-	return f.GetString_().Match(value)
+	match, err := f.GetString_().Match(value)
+	return checkNot(f, match, err)
 }
 
-func matchNumber(m proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
-	rval := m.ProtoReflect().Get(fd)
+func matchNumber(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
 	var val *float64
 	switch fd.Kind() {
 	case pref.Int32Kind,
@@ -93,7 +89,7 @@ func matchNumber(m proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, 
 	case pref.EnumKind:
 		val = proto.Float64(float64(rval.Enum()))
 	case pref.MessageKind:
-		if m.ProtoReflect().Has(fd) {
+		if rval.IsValid() {
 			switch WKType(fd.Message().FullName()) {
 			case DoubleValue, FloatValue:
 				val = proto.Float64(rval.Message().Get(fd.Message().Fields().Get(0)).Float())
@@ -110,73 +106,72 @@ func matchNumber(m proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, 
 	default:
 		return false, fmt.Errorf("cannot use number filter on %s", fd.Kind().String())
 	}
-	return f.GetNumber().Match(val)
+	match, err := f.GetNumber().Match(val)
+	return checkNot(f, match, err)
 }
 
-func matchBool(m proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
-	rval := m.ProtoReflect().Get(fd)
+func matchBool(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
 	var val *bool
 	if fd.Kind() != pref.BoolKind {
 		if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != BoolValue {
 			return false, fmt.Errorf("cannot use bool filter on %s", fd.Kind().String())
 		}
 		// return early as the condition will always be false
-		if !m.ProtoReflect().Has(fd) {
+		if !rval.IsValid() {
 			return false, nil
 		}
 		val = proto.Bool(rval.Message().Get(fd.Message().Fields().Get(0)).Bool())
 	}
-	return f.GetBool().Match(val)
+	match, err := f.GetBool().Match(val)
+	return checkNot(f, match, err)
 }
 
-func matchNull(m proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func matchNull(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
 	var match bool
 	switch fd.Kind() {
 	case pref.MessageKind:
-		match = !m.ProtoReflect().Has(fd)
+		match = !rval.Message().IsValid()
 	case pref.GroupKind:
-		match = m.ProtoReflect().Get(fd).List().Len() == 0
+		match = rval.List().Len() == 0
 	default:
 		return false, fmt.Errorf("cannot use null filter on %s", fd.Kind().String())
 	}
-	if f.GetNull().GetNot() {
-		return !match, nil
-	}
-	return match, nil
+	return checkNot(f, match, nil)
 }
 
-func matchTime(m proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func matchTime(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
 	if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != Timestamp {
 		return false, fmt.Errorf("cannot use time filter on %s", fd.Kind().String())
 	}
-	rval := m.ProtoReflect().Get(fd)
-	if !m.ProtoReflect().Has(fd) {
-		if f.GetTime().GetNot() {
-			return true, nil
-		}
+	if !rval.IsValid() {
 		return false, nil
 	}
-	return f.GetTime().Match(&timestamppb.Timestamp{
+	match, err := f.GetTime().Match(&timestamppb.Timestamp{
 		Seconds: rval.Message().Get(fd.Message().Fields().Get(0)).Int(),
 		Nanos:   int32(rval.Message().Get(fd.Message().Fields().Get(1)).Int()),
 	})
+	return checkNot(f, match, err)
 }
 
-func matchDuration(m proto.Message, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func matchDuration(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
 	if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != Duration {
 		return false, fmt.Errorf("cannot use duration filter on %s", fd.Kind().String())
 	}
-	rval := m.ProtoReflect().Get(fd)
-	if !m.ProtoReflect().Has(fd) {
-		if f.GetDuration().GetNot() {
-			return true, nil
-		}
+	if !rval.IsValid() {
 		return false, nil
 	}
 	rval.Message().Get(fd.Message().Fields().Get(0))
 
-	return f.GetDuration().Match(&durationpb.Duration{
+	match, err := f.GetDuration().Match(&durationpb.Duration{
 		Seconds: rval.Message().Get(fd.Message().Fields().Get(0)).Int(),
 		Nanos:   int32(rval.Message().Get(fd.Message().Fields().Get(1)).Int()),
 	})
+	return checkNot(f, match, err)
+}
+
+func checkNot(f *pf.Filter, match bool, err error) (bool, error) {
+	if f.GetNot() {
+		return !match, err
+	}
+	return match, err
 }

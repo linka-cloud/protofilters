@@ -46,6 +46,7 @@ message Filter {
     TimeFilter time = 5;
     DurationFilter duration = 6;
   }
+  bool not = 7;
 }
 
 message StringFilter {
@@ -57,8 +58,7 @@ message StringFilter {
     string regex = 2;
     In in = 3;
   }
-  bool not = 4;
-  bool case_insensitive = 5;
+  bool case_insensitive = 4;
 }
 
 message NumberFilter {
@@ -71,12 +71,9 @@ message NumberFilter {
     double inf = 3;
     In in = 4;
   }
-  bool not = 5;
 }
 
-message NullFilter {
-  bool not = 1;
-}
+message NullFilter {}
 
 message BoolFilter {
   bool equals = 1;
@@ -88,7 +85,6 @@ message TimeFilter {
     google.protobuf.Timestamp before = 2;
     google.protobuf.Timestamp after = 3;
   }
-  bool not = 4;
 }
 
 message DurationFilter {
@@ -97,5 +93,4 @@ message DurationFilter {
     google.protobuf.Duration sup = 2;
     google.protobuf.Duration inf = 3;
   }
-  bool not = 4;
 }

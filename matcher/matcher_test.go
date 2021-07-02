@@ -201,3 +201,34 @@ func TestTime(t *testing.T) {
 		Filter: pf.TimeBefore(m.TimeValueField.AsTime().Add(time.Second)),
 	}))
 }
+
+func TestRepeated(t *testing.T) {
+	assert := assert.New(t)
+	m := &test.Test{
+		StringField: "whatever",
+		NumberField: 42,
+		BoolField:   true,
+		EnumField:   test.Test_ONE,
+		MessageField: &test.Test{
+			StringField:         "whatever2",
+			NumberField:         43,
+			EnumField:           test.Test_TWO,
+			RepeatedStringField: []string{"three", "four"},
+		},
+		RepeatedStringField: []string{"one", "two"},
+		TimeValueField:      timestamppb.Now(),
+		DurationValueField:  durationpb.New(5 * time.Second),
+	}
+	assert.False(MatchFilters(m, &pf.FieldFilter{
+		Field:  "repeated_string_field",
+		Filter: pf.StringIN("four", "five"),
+	}))
+	assert.True(MatchFilters(m, &pf.FieldFilter{
+		Field:  "repeated_string_field",
+		Filter: pf.StringIN("two", "three"),
+	}))
+	assert.False(MatchFilters(m, &pf.FieldFilter{
+		Field:  "repeated_string_field",
+		Filter: pf.StringNotIN("two", "three"),
+	}))
+}
