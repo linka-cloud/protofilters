@@ -121,6 +121,8 @@ func matchBool(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, er
 			return false, nil
 		}
 		val = proto.Bool(rval.Message().Get(fd.Message().Fields().Get(0)).Bool())
+	} else {
+		val = proto.Bool(rval.Bool())
 	}
 	match, err := f.GetBool().Match(val)
 	return checkNot(f, match, err)
