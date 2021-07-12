@@ -40,6 +40,11 @@ func New(filters ...*FieldFilter) *FieldsFilter {
 	return &FieldsFilter{Filters: out}
 }
 
+// Field joins the parts as un field path, e.g. Field("message", "string_field") returns "message.string_field"
+func Field(parts ...string) string {
+	return strings.Join(parts, ".")
+}
+
 // StringEquals constructs a string equals filter
 func StringEquals(s string) *Filter {
 	return newStringFilter(&StringFilter{

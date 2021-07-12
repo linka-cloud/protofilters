@@ -67,7 +67,12 @@ type CachingMatcher interface {
 	Clear()
 }
 
-var defaultMatcher CachingMatcher = &matcher{cache: make(map[string]pref.FieldDescriptor)}
+// New creates a CachingMatcher
+func New() CachingMatcher {
+	return &matcher{cache: make(map[string]pref.FieldDescriptor)}
+}
+
+var defaultMatcher = New()
 
 // Match is a convenient method calling Match on the defaultMatcher
 func Match(msg proto.Message, f *pf.FieldsFilter) (bool, error) {
