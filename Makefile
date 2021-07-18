@@ -17,8 +17,7 @@ MODULE = go.linka.cloud/protofilters
 PROTO_BASE_PATH = $(PWD)
 
 INCLUDE_PROTO_PATH = -I$(PROTO_BASE_PATH) \
-	-I $(shell go list -m -f {{.Dir}} google.golang.org/protobuf) \
-	-I $(shell go list -m -f {{.Dir}} github.com/envoyproxy/protoc-gen-validate)
+	-I $(shell go list -m -f {{.Dir}} google.golang.org/protobuf)
 
 
 .PHONY: proto

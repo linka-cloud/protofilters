@@ -21,8 +21,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"go.linka.cloud/protofilters"
 	"go.linka.cloud/protofilters/filters"
-	"go.linka.cloud/protofilters/matcher"
 	test "go.linka.cloud/protofilters/tests/pb"
 )
 
@@ -31,14 +31,14 @@ func main() {
 		BoolField:      true,
 		BoolValueField: wrapperspb.Bool(false),
 	}
-	ok, err := matcher.MatchFilters(m, &filters.FieldFilter{Field: "bool_field", Filter: filters.True()})
+	ok, err := protofilters.MatchFilters(m, &filters.FieldFilter{Field: "bool_field", Filter: filters.True()})
 	if err != nil {
 		log.Fatalln(err)
 	}
 	if !ok {
 		log.Fatalln("should be true")
 	}
-	ok, err = matcher.MatchFilters(m, &filters.FieldFilter{Field: "bool_value_field", Filter: filters.False()})
+	ok, err = protofilters.MatchFilters(m, &filters.FieldFilter{Field: "bool_value_field", Filter: filters.False()})
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package matcher
+package protofilters
 
 import (
 	"errors"
@@ -67,12 +67,12 @@ type CachingMatcher interface {
 	Clear()
 }
 
-// New creates a CachingMatcher
-func New() CachingMatcher {
+// NewMatcher creates a CachingMatcher
+func NewMatcher() CachingMatcher {
 	return &matcher{cache: make(map[string]pref.FieldDescriptor)}
 }
 
-var defaultMatcher = New()
+var defaultMatcher = NewMatcher()
 
 // Match is a convenient method calling Match on the defaultMatcher
 func Match(msg proto.Message, f *filters.FieldsFilter) (bool, error) {

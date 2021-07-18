@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package matcher
+package protofilters
 
 import (
 	// These imports ensure that the internal protobuf registry knows these types
