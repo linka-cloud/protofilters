@@ -25,180 +25,180 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	pf "go.linka.cloud/protofilters"
+	"go.linka.cloud/protofilters/filters"
 	test "go.linka.cloud/protofilters/tests/pb"
 )
 
 func TestFieldFilter(t *testing.T) {
 	assert := assert.New(t)
 	m := &test.Test{StringField: "ok"}
-	ok, err := Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"noop": pf.StringEquals("ok"),
+	ok, err := Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"noop": filters.StringEquals("ok"),
 	}})
 	assert.Error(err)
 	assert.False(ok)
-	ok, err = Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"messageField": pf.Null(),
+	ok, err = Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"messageField": filters.Null(),
 	}})
 	assert.Error(err)
 	assert.False(ok)
 
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"message_field": pf.Null(),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"message_field": filters.Null(),
 	}}))
 	m.MessageField = m
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"message_field": pf.Null(),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"message_field": filters.Null(),
 	}}))
-	ok, err = Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"message_field.string_field.message_field": pf.Null(),
+	ok, err = Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"message_field.string_field.message_field": filters.Null(),
 	}})
 	assert.Error(err)
 	assert.False(ok)
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"message_field.message_field.message_field": pf.Null(),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"message_field.message_field.message_field": filters.Null(),
 	}}))
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"message_field.message_field.message_field.string_field": pf.StringIN("ok"),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"message_field.message_field.message_field.string_field": filters.StringIN("ok"),
 	}}))
 }
 
 func TestString(t *testing.T) {
 	assert := assert.New(t)
 	m := &test.Test{StringField: "ok"}
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_value_field": pf.StringEquals("ok"),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_value_field": filters.StringEquals("ok"),
 	}}))
 	m.StringValueField = wrapperspb.String("pointer")
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_value_field": pf.StringEquals("ok"),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_value_field": filters.StringEquals("ok"),
 	}}))
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_value_field": pf.StringEquals("pointer"),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_value_field": filters.StringEquals("pointer"),
 	}}))
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
 		"string_value_field": nil,
 	}}))
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_field": pf.StringEquals("ok"),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_field": filters.StringEquals("ok"),
 	}}))
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_field": pf.StringIN("other", "ok"),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_field": filters.StringIN("other", "ok"),
 	}}))
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_field": pf.StringIN("other", "noop"),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_field": filters.StringIN("other", "noop"),
 	}}))
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_field": pf.StringNotRegex(`[a-z](.+)`),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_field": filters.StringNotRegex(`[a-z](.+)`),
 	}}))
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_value_field": pf.StringNotRegex(`[a-z](.+)`),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_value_field": filters.StringNotRegex(`[a-z](.+)`),
 	}}))
 	m.StringValueField = wrapperspb.String("whatever")
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_value_field": pf.StringRegex(`[a-z](.+)`),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_value_field": filters.StringRegex(`[a-z](.+)`),
 	}}))
 }
 
 func TestEnum(t *testing.T) {
 	assert := assert.New(t)
 	m := &test.Test{EnumField: test.Test_Type(42)}
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"enum_field": pf.StringIN("OTHER"),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"enum_field": filters.StringIN("OTHER"),
 	}}))
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"enum_field": pf.NumberIN(0, 42),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"enum_field": filters.NumberIN(0, 42),
 	}}))
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"enum_field": pf.NumberNotIN(0, 42),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"enum_field": filters.NumberNotIN(0, 42),
 	}}))
 	m.EnumField = 0
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"string_field": pf.StringNotIN(),
-		"enum_field":   pf.StringIN("NONE"),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"string_field": filters.StringNotIN(),
+		"enum_field":   filters.StringIN("NONE"),
 	}}))
 }
 
 func TestNumber(t *testing.T) {
 	assert := assert.New(t)
 	m := &test.Test{NumberField: 42}
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"number_field": pf.NumberEquals(0),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"number_field": filters.NumberEquals(0),
 	}}))
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"number_field": pf.NumberEquals(42),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"number_field": filters.NumberEquals(42),
 	}}))
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"number_field": pf.NumberIN(0, 22),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"number_field": filters.NumberIN(0, 22),
 	}}))
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"number_field": pf.NumberInf(43),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"number_field": filters.NumberInf(43),
 	}}))
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"number_field": pf.NumberInf(41),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"number_field": filters.NumberInf(41),
 	}}))
-	assert.True(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"number_field": pf.NumberSup(41),
+	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"number_field": filters.NumberSup(41),
 	}}))
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"number_field": pf.NumberSup(43),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"number_field": filters.NumberSup(43),
 	}}))
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"number_value_field": pf.NumberSup(41),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"number_value_field": filters.NumberSup(41),
 	}}))
 	m.NumberValueField = wrapperspb.Int64(42)
-	assert.False(Match(m, &pf.FieldsFilter{Filters: pf.Filters{
-		"number_value_field": pf.NumberSup(43),
+	assert.False(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
+		"number_value_field": filters.NumberSup(43),
 	}}))
 }
 
 func TestDuration(t *testing.T) {
 	assert := assert.New(t)
 	m := &test.Test{DurationValueField: durationpb.New(42)}
-	assert.True(MatchFilters(m, &pf.FieldFilter{
+	assert.True(MatchFilters(m, &filters.FieldFilter{
 		Field:  "duration_value_field",
-		Filter: pf.DurationEquals(42),
+		Filter: filters.DurationEquals(42),
 	}))
-	assert.True(MatchFilters(m, &pf.FieldFilter{
+	assert.True(MatchFilters(m, &filters.FieldFilter{
 		Field:  "duration_value_field",
-		Filter: pf.DurationInf(43),
+		Filter: filters.DurationInf(43),
 	}))
-	assert.False(MatchFilters(m, &pf.FieldFilter{
+	assert.False(MatchFilters(m, &filters.FieldFilter{
 		Field:  "duration_value_field",
-		Filter: pf.DurationInf(41),
+		Filter: filters.DurationInf(41),
 	}))
-	assert.False(MatchFilters(m, &pf.FieldFilter{
+	assert.False(MatchFilters(m, &filters.FieldFilter{
 		Field:  "duration_value_field",
-		Filter: pf.DurationSup(43),
+		Filter: filters.DurationSup(43),
 	}))
-	assert.True(MatchFilters(m, &pf.FieldFilter{
+	assert.True(MatchFilters(m, &filters.FieldFilter{
 		Field:  "duration_value_field",
-		Filter: pf.DurationSup(41),
+		Filter: filters.DurationSup(41),
 	}))
 }
 
 func TestTime(t *testing.T) {
 	assert := assert.New(t)
 	m := &test.Test{TimeValueField: timestamppb.New(time.Now().UTC())}
-	assert.True(MatchFilters(m, &pf.FieldFilter{
+	assert.True(MatchFilters(m, &filters.FieldFilter{
 		Field:  "time_value_field",
-		Filter: pf.TimeEquals(m.TimeValueField.AsTime()),
+		Filter: filters.TimeEquals(m.TimeValueField.AsTime()),
 	}))
-	assert.True(MatchFilters(m, &pf.FieldFilter{
+	assert.True(MatchFilters(m, &filters.FieldFilter{
 		Field:  "time_value_field",
-		Filter: pf.TimeAfter(m.TimeValueField.AsTime().Add(-time.Second)),
+		Filter: filters.TimeAfter(m.TimeValueField.AsTime().Add(-time.Second)),
 	}))
-	assert.False(MatchFilters(m, &pf.FieldFilter{
+	assert.False(MatchFilters(m, &filters.FieldFilter{
 		Field:  "time_value_field",
-		Filter: pf.TimeAfter(m.TimeValueField.AsTime().Add(time.Second)),
+		Filter: filters.TimeAfter(m.TimeValueField.AsTime().Add(time.Second)),
 	}))
-	assert.False(MatchFilters(m, &pf.FieldFilter{
+	assert.False(MatchFilters(m, &filters.FieldFilter{
 		Field:  "time_value_field",
-		Filter: pf.TimeBefore(m.TimeValueField.AsTime().Add(-time.Second)),
+		Filter: filters.TimeBefore(m.TimeValueField.AsTime().Add(-time.Second)),
 	}))
-	assert.True(MatchFilters(m, &pf.FieldFilter{
+	assert.True(MatchFilters(m, &filters.FieldFilter{
 		Field:  "time_value_field",
-		Filter: pf.TimeBefore(m.TimeValueField.AsTime().Add(time.Second)),
+		Filter: filters.TimeBefore(m.TimeValueField.AsTime().Add(time.Second)),
 	}))
 }
 
@@ -219,16 +219,16 @@ func TestRepeated(t *testing.T) {
 		TimeValueField:      timestamppb.Now(),
 		DurationValueField:  durationpb.New(5 * time.Second),
 	}
-	assert.False(MatchFilters(m, &pf.FieldFilter{
+	assert.False(MatchFilters(m, &filters.FieldFilter{
 		Field:  "repeated_string_field",
-		Filter: pf.StringIN("four", "five"),
+		Filter: filters.StringIN("four", "five"),
 	}))
-	assert.True(MatchFilters(m, &pf.FieldFilter{
+	assert.True(MatchFilters(m, &filters.FieldFilter{
 		Field:  "repeated_string_field",
-		Filter: pf.StringIN("two", "three"),
+		Filter: filters.StringIN("two", "three"),
 	}))
-	assert.False(MatchFilters(m, &pf.FieldFilter{
+	assert.False(MatchFilters(m, &filters.FieldFilter{
 		Field:  "repeated_string_field",
-		Filter: pf.StringNotIN("two", "three"),
+		Filter: filters.StringNotIN("two", "three"),
 	}))
 }

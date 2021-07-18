@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	pref "google.golang.org/protobuf/reflect/protoreflect"
 
-	pf "go.linka.cloud/protofilters"
+	"go.linka.cloud/protofilters/filters"
 )
 
 // WKType represents a google.protobuf well-known type
@@ -54,10 +54,10 @@ const (
 type Matcher interface {
 	// Match matches to proto.Message against the protofilters.FieldsFilter
 	// It returns an error if one of the field path or FieldFilter is invalid
-	Match(m proto.Message, f *pf.FieldsFilter) (bool, error)
+	Match(m proto.Message, f *filters.FieldsFilter) (bool, error)
 	// MatchFilters matches to proto.Message against the protofilters.FieldFilter slice
 	// It returns an error if one of the field path or FieldFilter is invalid
-	MatchFilters(m proto.Message, fs ...*pf.FieldFilter) (bool, error)
+	MatchFilters(m proto.Message, fs ...*filters.FieldFilter) (bool, error)
 }
 
 // CachingMatcher is a Matcher that cache messages field path lookup results
@@ -75,12 +75,12 @@ func New() CachingMatcher {
 var defaultMatcher = New()
 
 // Match is a convenient method calling Match on the defaultMatcher
-func Match(msg proto.Message, f *pf.FieldsFilter) (bool, error) {
+func Match(msg proto.Message, f *filters.FieldsFilter) (bool, error) {
 	return defaultMatcher.Match(msg, f)
 }
 
 // MatchFilters is a convenient calling MatchFilters on the defaultMatcher
-func MatchFilters(msg proto.Message, fs ...*pf.FieldFilter) (bool, error) {
+func MatchFilters(msg proto.Message, fs ...*filters.FieldFilter) (bool, error) {
 	return defaultMatcher.MatchFilters(msg, fs...)
 }
 
@@ -89,7 +89,7 @@ type matcher struct {
 	cache map[string]pref.FieldDescriptor
 }
 
-func (m *matcher) Match(msg proto.Message, f *pf.FieldsFilter) (bool, error) {
+func (m *matcher) Match(msg proto.Message, f *filters.FieldsFilter) (bool, error) {
 	if msg == nil {
 		return false, errors.New("message is null")
 	}
@@ -132,8 +132,8 @@ func (m *matcher) Match(msg proto.Message, f *pf.FieldsFilter) (bool, error) {
 	return true, nil
 }
 
-func (m *matcher) MatchFilters(msg proto.Message, fs ...*pf.FieldFilter) (bool, error) {
-	f := pf.New(fs...)
+func (m *matcher) MatchFilters(msg proto.Message, fs ...*filters.FieldFilter) (bool, error) {
+	f := filters.New(fs...)
 	return m.Match(msg, f)
 }
 

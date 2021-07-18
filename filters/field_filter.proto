@@ -21,7 +21,7 @@ option java_package = "cloud.linka.protofilters";
 option java_outer_classname = "ProtoFilters";
 option java_multiple_files = true;
 option objc_class_prefix = "LKPF";
-option go_package = "go.linka.cloud/protofilters;protofilters";
+option go_package = "go.linka.cloud/protofilters/filters;filters";
 option cc_enable_arenas = true;
 
 

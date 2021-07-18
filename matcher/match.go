@@ -24,28 +24,28 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pf "go.linka.cloud/protofilters"
+	"go.linka.cloud/protofilters/filters"
 )
 
-func match(val pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func match(val pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
 	switch f.GetMatch().(type) {
-	case *pf.Filter_String_:
+	case *filters.Filter_String_:
 		return matchString(val, fd, f)
-	case *pf.Filter_Number:
+	case *filters.Filter_Number:
 		return matchNumber(val, fd, f)
-	case *pf.Filter_Bool:
+	case *filters.Filter_Bool:
 		return matchBool(val, fd, f)
-	case *pf.Filter_Null:
+	case *filters.Filter_Null:
 		return matchNull(val, fd, f)
-	case *pf.Filter_Time:
+	case *filters.Filter_Time:
 		return matchTime(val, fd, f)
-	case *pf.Filter_Duration:
+	case *filters.Filter_Duration:
 		return matchDuration(val, fd, f)
 	}
 	return false, nil
 }
 
-func matchString(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func matchString(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
 	var value *string
 	if fd.Kind() != pref.StringKind && fd.Kind() != pref.EnumKind {
 		if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != StringValue {
@@ -70,7 +70,7 @@ func matchString(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, 
 	return checkNot(f, match, err)
 }
 
-func matchNumber(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func matchNumber(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
 	var val *float64
 	switch fd.Kind() {
 	case pref.Int32Kind,
@@ -110,7 +110,7 @@ func matchNumber(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, 
 	return checkNot(f, match, err)
 }
 
-func matchBool(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func matchBool(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
 	var val *bool
 	if fd.Kind() != pref.BoolKind {
 		if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != BoolValue {
@@ -128,7 +128,7 @@ func matchBool(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, er
 	return checkNot(f, match, err)
 }
 
-func matchNull(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func matchNull(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
 	var match bool
 	switch fd.Kind() {
 	case pref.MessageKind:
@@ -141,7 +141,7 @@ func matchNull(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, er
 	return checkNot(f, match, nil)
 }
 
-func matchTime(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func matchTime(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
 	if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != Timestamp {
 		return false, fmt.Errorf("cannot use time filter on %s", fd.Kind().String())
 	}
@@ -155,7 +155,7 @@ func matchTime(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, er
 	return checkNot(f, match, err)
 }
 
-func matchDuration(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool, error) {
+func matchDuration(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
 	if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != Duration {
 		return false, fmt.Errorf("cannot use duration filter on %s", fd.Kind().String())
 	}
@@ -171,7 +171,7 @@ func matchDuration(rval pref.Value, fd pref.FieldDescriptor, f *pf.Filter) (bool
 	return checkNot(f, match, err)
 }
 
-func checkNot(f *pf.Filter, match bool, err error) (bool, error) {
+func checkNot(f *filters.Filter, match bool, err error) (bool, error) {
 	if f.GetNot() {
 		return !match, err
 	}
