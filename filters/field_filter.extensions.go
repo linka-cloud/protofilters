@@ -35,6 +35,7 @@ func New(filters ...*FieldFilter) *FieldsFilter {
 		if v == nil {
 			continue
 		}
+		// TODO(adphi):  what if there is more than one filter for this field ?
 		out[v.Field] = v.Filter
 	}
 	return &FieldsFilter{Filters: out}
