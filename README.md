@@ -1,6 +1,7 @@
 # Proto Filters
 
 [![Go Reference](https://pkg.go.dev/badge/go.linka.cloud/protofilters.svg)](https://pkg.go.dev/go.linka.cloud/protofilters)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Flinka-cloud%2Fprotofilters.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Flinka-cloud%2Fprotofilters?ref=badge_shield)
 
 Proto filters provides a simple way to filter protobuf message based on field filter conditions.
 
@@ -143,3 +144,7 @@ func main() {
 
 - [ ] support **and/or** conditions
 - [ ] support more languages
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Flinka-cloud%2Fprotofilters.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Flinka-cloud%2Fprotofilters?ref=badge_large)
