@@ -319,17 +319,15 @@ func TestMatchExpression(t *testing.T) {
 			},
 		}},
 	}))
-	assert.True(MatchExpression(
-		m,
-		filters.NewFieldFilter("string_field", filters.StringEquals("whatever")).
-			And("number_field", filters.NumberIN(42, 43)).
-			OrE(
-				filters.NewFieldFilter("bool_field", filters.False()).
-					Or("optional_bool_field", filters.False()),
-			),
-	),
-	)
-	assert.True(MatchExpression(m, &filters.Expression{
+	f1 := filters.Where("string_field", filters.StringEquals("whatever")).
+		And("number_field", filters.NumberIN(42, 43)).
+		OrE(
+			filters.Where("bool_field", filters.False()).
+				Or("optional_bool_field", filters.False()),
+		)
+
+	assert.True(MatchExpression(m, f1))
+	f2 := &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",
 			Filter: filters.StringEquals("whatever"),
@@ -352,7 +350,9 @@ func TestMatchExpression(t *testing.T) {
 				},
 			}},
 		}},
-	}))
+	}
+	assert.True(MatchExpression(m, f2))
+	assert.Equal(f1, f2)
 	assert.False(MatchExpression(m, &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",

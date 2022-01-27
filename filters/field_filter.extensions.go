@@ -41,7 +41,7 @@ func New(filters ...*FieldFilter) *FieldsFilter {
 	return &FieldsFilter{Filters: out}
 }
 
-func NewFieldFilter(field string, filter *Filter) *FieldFilter {
+func Where(field string, filter *Filter) *FieldFilter {
 	return &FieldFilter{Field: field, Filter: filter}
 }
 
@@ -375,20 +375,20 @@ func (x *FieldFilter) OrF(f *FieldFilter) *Expression {
 }
 
 func (x *FieldFilter) And(fd string, ft *Filter) *Expression {
-	return &Expression{Condition: x, AndExprs: []*Expression{{Condition: NewFieldFilter(fd, ft)}}}
+	return &Expression{Condition: x, AndExprs: []*Expression{{Condition: Where(fd, ft)}}}
 }
 
 func (x *FieldFilter) Or(fd string, ft *Filter) *Expression {
-	return &Expression{Condition: x, OrExprs: []*Expression{{Condition: NewFieldFilter(fd, ft)}}}
+	return &Expression{Condition: x, OrExprs: []*Expression{{Condition: Where(fd, ft)}}}
 }
 
 func (x *Expression) And(fd string, ft *Filter) *Expression {
-	x.AndExprs = append(x.AndExprs, &Expression{Condition: NewFieldFilter(fd, ft)})
+	x.AndExprs = append(x.AndExprs, &Expression{Condition: Where(fd, ft)})
 	return x
 }
 
 func (x *Expression) Or(fd string, ft *Filter) *Expression {
-	x.AndExprs = append(x.OrExprs, &Expression{Condition: NewFieldFilter(fd, ft)})
+	x.AndExprs = append(x.OrExprs, &Expression{Condition: Where(fd, ft)})
 	return x
 }
 
