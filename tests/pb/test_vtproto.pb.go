@@ -53,6 +53,35 @@ func (m *Test) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.OptionalEnumField != nil {
+		i = encodeVarint(dAtA, i, uint64(*m.OptionalEnumField))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x80
+	}
+	if m.OptionalBoolField != nil {
+		i--
+		if *m.OptionalBoolField {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x78
+	}
+	if m.OptionalNumberField != nil {
+		i = encodeVarint(dAtA, i, uint64(*m.OptionalNumberField))
+		i--
+		dAtA[i] = 0x70
+	}
+	if m.OptionalStringField != nil {
+		i -= len(*m.OptionalStringField)
+		copy(dAtA[i:], *m.OptionalStringField)
+		i = encodeVarint(dAtA, i, uint64(len(*m.OptionalStringField)))
+		i--
+		dAtA[i] = 0x6a
+	}
 	if m.DurationValueField != nil {
 		if marshalto, ok := interface{}(m.DurationValueField).(interface {
 			MarshalToSizedBufferVT([]byte) (int, error)
@@ -329,6 +358,19 @@ func (m *Test) SizeVT() (n int) {
 			l = proto.Size(m.DurationValueField)
 		}
 		n += 1 + l + sov(uint64(l))
+	}
+	if m.OptionalStringField != nil {
+		l = len(*m.OptionalStringField)
+		n += 1 + l + sov(uint64(l))
+	}
+	if m.OptionalNumberField != nil {
+		n += 1 + sov(uint64(*m.OptionalNumberField))
+	}
+	if m.OptionalBoolField != nil {
+		n += 2
+	}
+	if m.OptionalEnumField != nil {
+		n += 2 + sov(uint64(*m.OptionalEnumField))
 	}
 	if m.unknownFields != nil {
 		n += len(m.unknownFields)
@@ -818,6 +860,100 @@ func (m *Test) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			iNdEx = postIndex
+		case 13:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OptionalStringField", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.OptionalStringField = &s
+			iNdEx = postIndex
+		case 14:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OptionalNumberField", wireType)
+			}
+			var v int64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.OptionalNumberField = &v
+		case 15:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OptionalBoolField", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.OptionalBoolField = &b
+		case 16:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OptionalEnumField", wireType)
+			}
+			var v Test_Type
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= Test_Type(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.OptionalEnumField = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skip(dAtA[iNdEx:])

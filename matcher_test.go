@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -230,5 +231,150 @@ func TestRepeated(t *testing.T) {
 	assert.False(MatchFilters(m, &filters.FieldFilter{
 		Field:  "repeated_string_field",
 		Filter: filters.StringNotIN("two", "three"),
+	}))
+}
+
+func TestOptional(t *testing.T) {
+	assert := assert.New(t)
+	e := test.Test_Type(42)
+	m := &test.Test{
+		OptionalEnumField:   &e,
+		OptionalStringField: proto.String("42"),
+		OptionalBoolField:   proto.Bool(false),
+		OptionalNumberField: proto.Int64(42),
+	}
+	assert.True(MatchFilters(m, &filters.FieldFilter{
+		Field:  "optional_string_field",
+		Filter: filters.StringIN("42", "43"),
+	}))
+	assert.True(MatchFilters(m, &filters.FieldFilter{
+		Field:  "optional_bool_field",
+		Filter: filters.False(),
+	}))
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "optional_bool_field",
+		Filter: filters.True(),
+	}))
+	assert.True(MatchFilters(m, &filters.FieldFilter{
+		Field:  "optional_number_field",
+		Filter: filters.NumberInf(43),
+	}))
+}
+
+func TestMatchExpression(t *testing.T) {
+	assert := assert.New(t)
+	e := test.Test_Type(42)
+	m := &test.Test{
+		StringField: "whatever",
+		NumberField: 42,
+		BoolField:   true,
+		EnumField:   test.Test_ONE,
+		MessageField: &test.Test{
+			StringField:         "whatever2",
+			NumberField:         43,
+			EnumField:           test.Test_TWO,
+			RepeatedStringField: []string{"three", "four"},
+		},
+		RepeatedStringField: []string{"one", "two"},
+		TimeValueField:      timestamppb.Now(),
+		DurationValueField:  durationpb.New(5 * time.Second),
+		OptionalEnumField:   &e,
+		OptionalStringField: proto.String("42"),
+		OptionalBoolField:   proto.Bool(false),
+		OptionalNumberField: proto.Int64(42),
+	}
+	assert.False(MatchExpression(m, &filters.Expression{
+		Condition: &filters.FieldFilter{
+			Field:  "string_field",
+			Filter: filters.StringEquals("not whatever"),
+		},
+	}))
+	assert.True(MatchExpression(m, &filters.Expression{
+		Condition: &filters.FieldFilter{
+			Field:  "string_field",
+			Filter: filters.StringEquals("whatever"),
+		},
+	}))
+	assert.True(MatchExpression(m, &filters.Expression{
+		Condition: &filters.FieldFilter{
+			Field:  "string_field",
+			Filter: filters.StringEquals("whatever"),
+		},
+		AndExprs: []*filters.Expression{{
+			Condition: &filters.FieldFilter{
+				Field:  "string_field",
+				Filter: filters.StringNotEquals("what"),
+			},
+		}},
+	}))
+	assert.False(MatchExpression(m, &filters.Expression{
+		Condition: &filters.FieldFilter{
+			Field:  "string_field",
+			Filter: filters.StringEquals("whatever"),
+		},
+		AndExprs: []*filters.Expression{{
+			Condition: &filters.FieldFilter{
+				Field:  "string_field",
+				Filter: filters.StringNotEquals("whatever"),
+			},
+		}},
+	}))
+	assert.True(MatchExpression(
+		m,
+		filters.NewFieldFilter("string_field", filters.StringEquals("whatever")).
+			And("number_field", filters.NumberIN(42, 43)).
+			OrE(
+				filters.NewFieldFilter("bool_field", filters.False()).
+					Or("optional_bool_field", filters.False()),
+			),
+	),
+	)
+	assert.True(MatchExpression(m, &filters.Expression{
+		Condition: &filters.FieldFilter{
+			Field:  "string_field",
+			Filter: filters.StringEquals("whatever"),
+		},
+		AndExprs: []*filters.Expression{{
+			Condition: &filters.FieldFilter{
+				Field:  "number_field",
+				Filter: filters.NumberIN(42, 43),
+			},
+		}},
+		OrExprs: []*filters.Expression{{
+			Condition: &filters.FieldFilter{
+				Field:  "bool_field",
+				Filter: filters.False(),
+			},
+			OrExprs: []*filters.Expression{{
+				Condition: &filters.FieldFilter{
+					Field:  "optional_bool_field",
+					Filter: filters.False(),
+				},
+			}},
+		}},
+	}))
+	assert.False(MatchExpression(m, &filters.Expression{
+		Condition: &filters.FieldFilter{
+			Field:  "string_field",
+			Filter: filters.StringEquals("whatever"),
+		},
+		AndExprs: []*filters.Expression{{
+			Condition: &filters.FieldFilter{
+				Field:  "number_field",
+				Filter: filters.NumberNotIN(42, 43),
+			},
+		}},
+		OrExprs: []*filters.Expression{{
+			Condition: &filters.FieldFilter{
+				Field:  "bool_field",
+				Filter: filters.False(),
+			},
+			OrExprs: []*filters.Expression{{
+				Condition: &filters.FieldFilter{
+					Field:  "optional_bool_field",
+					Filter: filters.False(),
+				},
+			}},
+		}},
 	}))
 }

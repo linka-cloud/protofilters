@@ -58,6 +58,8 @@ type Matcher interface {
 	// MatchFilters matches to proto.Message against the protofilters.FieldFilter slice
 	// It returns an error if one of the field path or FieldFilter is invalid
 	MatchFilters(m proto.Message, fs ...*filters.FieldFilter) (bool, error)
+
+	MatchExpression(msg proto.Message, expr *filters.Expression) (bool, error)
 }
 
 // CachingMatcher is a Matcher that cache messages field path lookup results
@@ -84,9 +86,49 @@ func MatchFilters(msg proto.Message, fs ...*filters.FieldFilter) (bool, error) {
 	return defaultMatcher.MatchFilters(msg, fs...)
 }
 
+func MatchExpression(msg proto.Message, expr *filters.Expression) (bool, error) {
+	return defaultMatcher.MatchExpression(msg, expr)
+}
+
 type matcher struct {
 	mu    sync.RWMutex
 	cache map[string]pref.FieldDescriptor
+}
+
+func (m *matcher) MatchExpression(msg proto.Message, expr *filters.Expression) (bool, error) {
+	ok, err := m.Match(msg, filters.New(expr.Condition))
+	if err != nil {
+		return false, err
+	}
+	if (expr.OrExprs == nil || expr.AndExprs != nil) && !ok {
+		return false, nil
+	}
+	if expr.OrExprs != nil {
+		if expr.AndExprs == nil && ok {
+			return true, nil
+		}
+		for _, v := range expr.OrExprs {
+			orOk, err := m.MatchExpression(msg, v)
+			if err != nil {
+				return false, err
+			}
+			if orOk && expr.AndExprs == nil {
+				return true, nil
+			}
+		}
+	}
+	if expr.AndExprs != nil {
+		for _, v := range expr.AndExprs {
+			andOk, err := m.MatchExpression(msg, v)
+			if err != nil {
+				return false, err
+			}
+			if !andOk {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
 
 func (m *matcher) Match(msg proto.Message, f *filters.FieldsFilter) (bool, error) {

@@ -41,6 +41,10 @@ func New(filters ...*FieldFilter) *FieldsFilter {
 	return &FieldsFilter{Filters: out}
 }
 
+func NewFieldFilter(field string, filter *Filter) *FieldFilter {
+	return &FieldFilter{Field: field, Filter: filter}
+}
+
 // Field joins the parts as un field path, e.g. Field("message", "string_field") returns "message.string_field"
 func Field(parts ...string) string {
 	return strings.Join(parts, ".")
@@ -360,6 +364,52 @@ func newTimeFilter(f *TimeFilter, not ...bool) *Filter {
 		},
 		Not: len(not) > 0 && not[0],
 	}
+}
+
+func (x *FieldFilter) AndF(f *FieldFilter) *Expression {
+	return &Expression{Condition: x, AndExprs: []*Expression{{Condition: f}}}
+}
+
+func (x *FieldFilter) OrF(f *FieldFilter) *Expression {
+	return &Expression{Condition: x, OrExprs: []*Expression{{Condition: f}}}
+}
+
+func (x *FieldFilter) And(fd string, ft *Filter) *Expression {
+	return &Expression{Condition: x, AndExprs: []*Expression{{Condition: NewFieldFilter(fd, ft)}}}
+}
+
+func (x *FieldFilter) Or(fd string, ft *Filter) *Expression {
+	return &Expression{Condition: x, OrExprs: []*Expression{{Condition: NewFieldFilter(fd, ft)}}}
+}
+
+func (x *Expression) And(fd string, ft *Filter) *Expression {
+	x.AndExprs = append(x.AndExprs, &Expression{Condition: NewFieldFilter(fd, ft)})
+	return x
+}
+
+func (x *Expression) Or(fd string, ft *Filter) *Expression {
+	x.AndExprs = append(x.OrExprs, &Expression{Condition: NewFieldFilter(fd, ft)})
+	return x
+}
+
+func (x *Expression) AndF(f *FieldFilter) *Expression {
+	x.AndExprs = append(x.AndExprs, &Expression{Condition: f})
+	return x
+}
+
+func (x *Expression) OrF(f *FieldFilter) *Expression {
+	x.AndExprs = append(x.OrExprs, &Expression{Condition: f})
+	return x
+}
+
+func (x *Expression) AndE(e *Expression) *Expression {
+	x.AndExprs = append(x.AndExprs, e)
+	return x
+}
+
+func (x *Expression) OrE(e *Expression) *Expression {
+	x.OrExprs = append(x.OrExprs, e)
+	return x
 }
 
 // Match applies the filter against the provided string pointer

@@ -40,4 +40,9 @@ message Test {
   google.protobuf.BoolValue bool_value_field = 10;
   google.protobuf.Timestamp time_value_field = 11;
   google.protobuf.Duration duration_value_field = 12;
+
+  optional string optional_string_field = 13;
+  optional int64 optional_number_field = 14;
+  optional bool optional_bool_field = 15;
+  optional Type optional_enum_field = 16;
 }

@@ -28,6 +28,12 @@ option cc_enable_arenas = true;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
+message Expression {
+  FieldFilter condition = 1;
+  repeated Expression and_exprs = 2;
+  repeated Expression or_exprs = 3;
+}
+
 message FieldsFilter {
   // Filters is a map of <field path, Filter>
   map<string, Filter> filters = 1;
