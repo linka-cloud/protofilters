@@ -96,6 +96,12 @@ type matcher struct {
 }
 
 func (m *matcher) MatchExpression(msg proto.Message, expr *filters.Expression) (bool, error) {
+	if msg == nil {
+		return false, errors.New("message is null")
+	}
+	if expr == nil {
+		return true, nil
+	}
 	ok, err := m.Match(msg, filters.New(expr.Condition))
 	if err != nil {
 		return false, err
