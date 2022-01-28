@@ -366,6 +366,10 @@ func newTimeFilter(f *TimeFilter, not ...bool) *Filter {
 	}
 }
 
+func (x *FieldFilter) Expr() *Expression {
+	return &Expression{Condition: x}
+}
+
 func (x *FieldFilter) AndF(f *FieldFilter) *Expression {
 	return &Expression{Condition: x, AndExprs: []*Expression{{Condition: f}}}
 }
