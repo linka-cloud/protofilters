@@ -514,3 +514,24 @@ func (x *DurationFilter) Match(v *durationpb.Duration) (bool, error) {
 	}
 	return false, nil
 }
+
+// Expr is a convenient method so that both Expression and FieldFilter
+// implement the FieldFilterer interface
+func (x *Expression) Expr() *Expression {
+	return x
+}
+
+func (x *FieldsFilter) Expr() *Expression {
+	if len(x.Filters) == 0 {
+		return nil
+	}
+	e := &Expression{}
+	for k, v := range x.Filters {
+		if e.Condition == nil {
+			e.Condition = &FieldFilter{Field: k, Filter: v}
+			continue
+		}
+		e = e.And(k, v)
+	}
+	return e
+}

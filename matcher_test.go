@@ -283,19 +283,19 @@ func TestMatchExpression(t *testing.T) {
 		OptionalBoolField:   proto.Bool(false),
 		OptionalNumberField: proto.Int64(42),
 	}
-	assert.False(MatchExpression(m, &filters.Expression{
+	assert.False(Match(m, &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",
 			Filter: filters.StringEquals("not whatever"),
 		},
 	}))
-	assert.True(MatchExpression(m, &filters.Expression{
+	assert.True(Match(m, &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",
 			Filter: filters.StringEquals("whatever"),
 		},
 	}))
-	assert.True(MatchExpression(m, &filters.Expression{
+	assert.True(Match(m, &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",
 			Filter: filters.StringEquals("whatever"),
@@ -307,7 +307,7 @@ func TestMatchExpression(t *testing.T) {
 			},
 		}},
 	}))
-	assert.False(MatchExpression(m, &filters.Expression{
+	assert.False(Match(m, &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",
 			Filter: filters.StringEquals("whatever"),
@@ -326,7 +326,7 @@ func TestMatchExpression(t *testing.T) {
 				Or("optional_bool_field", filters.False()),
 		)
 
-	assert.True(MatchExpression(m, f1))
+	assert.True(Match(m, f1))
 	f2 := &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",
@@ -351,9 +351,9 @@ func TestMatchExpression(t *testing.T) {
 			}},
 		}},
 	}
-	assert.True(MatchExpression(m, f2))
+	assert.True(Match(m, f2))
 	assert.Equal(f1, f2)
-	assert.False(MatchExpression(m, &filters.Expression{
+	assert.False(Match(m, &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",
 			Filter: filters.StringEquals("whatever"),

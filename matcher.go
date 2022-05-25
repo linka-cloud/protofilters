@@ -52,9 +52,9 @@ const (
 
 // Matcher provides a way to match proto.Message against protofilters.Filter
 type Matcher interface {
-	// Match matches to proto.Message against the protofilters.FieldsFilter
+	// Match matches to proto.Message against the protofilters.FieldsFilterer
 	// It returns an error if one of the field path or FieldFilter is invalid
-	Match(m proto.Message, f *filters.FieldsFilter) (bool, error)
+	Match(m proto.Message, f filters.FieldFilterer) (bool, error)
 	// MatchFilters matches to proto.Message against the protofilters.FieldFilter slice
 	// It returns an error if one of the field path or FieldFilter is invalid
 	MatchFilters(m proto.Message, fs ...*filters.FieldFilter) (bool, error)
@@ -77,7 +77,7 @@ func NewMatcher() CachingMatcher {
 var defaultMatcher = NewMatcher()
 
 // Match is a convenient method calling Match on the defaultMatcher
-func Match(msg proto.Message, f *filters.FieldsFilter) (bool, error) {
+func Match(msg proto.Message, f filters.FieldFilterer) (bool, error) {
 	return defaultMatcher.Match(msg, f)
 }
 
@@ -86,6 +86,7 @@ func MatchFilters(msg proto.Message, fs ...*filters.FieldFilter) (bool, error) {
 	return defaultMatcher.MatchFilters(msg, fs...)
 }
 
+// Deprecated: MatchExpression match proto.Message against the given expression, Match should be used instead
 func MatchExpression(msg proto.Message, expr *filters.Expression) (bool, error) {
 	return defaultMatcher.MatchExpression(msg, expr)
 }
@@ -95,14 +96,20 @@ type matcher struct {
 	cache map[string]pref.FieldDescriptor
 }
 
+// Deprecated: MatchExpression match proto.Message against the given expression, Match should be used instead
 func (m *matcher) MatchExpression(msg proto.Message, expr *filters.Expression) (bool, error) {
+	return m.Match(msg, expr)
+}
+
+func (m *matcher) Match(msg proto.Message, f filters.FieldFilterer) (bool, error) {
 	if msg == nil {
 		return false, errors.New("message is null")
 	}
-	if expr == nil {
+	if f == nil || f.Expr() == nil {
 		return true, nil
 	}
-	ok, err := m.Match(msg, filters.New(expr.Condition))
+	expr := f.Expr()
+	ok, err := m.match(msg, filters.New(expr.Condition))
 	if err != nil {
 		return false, err
 	}
@@ -114,7 +121,7 @@ func (m *matcher) MatchExpression(msg proto.Message, expr *filters.Expression) (
 			return true, nil
 		}
 		for _, v := range expr.OrExprs {
-			orOk, err := m.MatchExpression(msg, v)
+			orOk, err := m.Match(msg, v)
 			if err != nil {
 				return false, err
 			}
@@ -125,7 +132,7 @@ func (m *matcher) MatchExpression(msg proto.Message, expr *filters.Expression) (
 	}
 	if expr.AndExprs != nil {
 		for _, v := range expr.AndExprs {
-			andOk, err := m.MatchExpression(msg, v)
+			andOk, err := m.Match(msg, v)
 			if err != nil {
 				return false, err
 			}
@@ -137,7 +144,7 @@ func (m *matcher) MatchExpression(msg proto.Message, expr *filters.Expression) (
 	return true, nil
 }
 
-func (m *matcher) Match(msg proto.Message, f *filters.FieldsFilter) (bool, error) {
+func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error) {
 	if msg == nil {
 		return false, errors.New("message is null")
 	}
@@ -182,7 +189,7 @@ func (m *matcher) Match(msg proto.Message, f *filters.FieldsFilter) (bool, error
 
 func (m *matcher) MatchFilters(msg proto.Message, fs ...*filters.FieldFilter) (bool, error) {
 	f := filters.New(fs...)
-	return m.Match(msg, f)
+	return m.match(msg, f)
 }
 
 func (m *matcher) Clear() {
