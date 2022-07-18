@@ -37,6 +37,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Expression represent a complete condition
+// fields are evaluated as the following expression:
+// condition && and_exprs || or_exprs
 type Expression struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

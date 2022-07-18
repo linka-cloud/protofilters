@@ -113,35 +113,31 @@ func (m *matcher) Match(msg proto.Message, f filters.FieldFilterer) (bool, error
 	if err != nil {
 		return false, err
 	}
-	if (expr.OrExprs == nil || expr.AndExprs != nil) && !ok {
+	andOk := true
+	for _, v := range expr.AndExprs {
+		andOk, err = m.Match(msg, v)
+		if err != nil {
+			return false, err
+		}
+		if !andOk {
+			break
+		}
+	}
+	orOk := false
+	if expr.OrExprs == nil && !ok {
 		return false, nil
 	}
-	if expr.OrExprs != nil {
-		if expr.AndExprs == nil && ok {
-			return true, nil
+	for _, v := range expr.OrExprs {
+		orOk, err = m.Match(msg, v)
+		if err != nil {
+			return false, err
 		}
-		for _, v := range expr.OrExprs {
-			orOk, err := m.Match(msg, v)
-			if err != nil {
-				return false, err
-			}
-			if orOk && expr.AndExprs == nil {
-				return true, nil
-			}
+		if orOk {
+			break
 		}
 	}
-	if expr.AndExprs != nil {
-		for _, v := range expr.AndExprs {
-			andOk, err := m.Match(msg, v)
-			if err != nil {
-				return false, err
-			}
-			if !andOk {
-				return false, nil
-			}
-		}
-	}
-	return true, nil
+
+	return ok && andOk || orOk, nil
 }
 
 func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error) {

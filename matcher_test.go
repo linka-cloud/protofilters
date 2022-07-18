@@ -353,7 +353,7 @@ func TestMatchExpression(t *testing.T) {
 	}
 	assert.True(Match(m, f2))
 	assert.Equal(f1, f2)
-	assert.False(Match(m, &filters.Expression{
+	assert.True(Match(m, &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",
 			Filter: filters.StringEquals("whatever"),
@@ -375,6 +375,26 @@ func TestMatchExpression(t *testing.T) {
 					Filter: filters.False(),
 				},
 			}},
+		}},
+	}))
+}
+
+func TestSimpleOrFalse(t *testing.T) {
+	assert := assert.New(t)
+	m := &test.Test{
+		StringField: "whatever",
+		BoolField:   true,
+	}
+	assert.False(Match(m, &filters.Expression{
+		Condition: &filters.FieldFilter{
+			Field:  "string_field",
+			Filter: filters.StringEquals("something"),
+		},
+		OrExprs: []*filters.Expression{{
+			Condition: &filters.FieldFilter{
+				Field:  "bool_field",
+				Filter: filters.False(),
+			},
 		}},
 	}))
 }
