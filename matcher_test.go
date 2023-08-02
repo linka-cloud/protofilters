@@ -357,6 +357,7 @@ func TestMatchExpression(t *testing.T) {
 	}
 	assert.True(Match(m, f2))
 	assert.Equal(f1, f2)
+	assert.Equal([]string{"bool_field", "number_field", "optional_bool_field", "string_field"}, f1.Fields())
 	assert.True(Match(m, &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",

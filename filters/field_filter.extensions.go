@@ -18,6 +18,7 @@ package filters
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -619,6 +620,29 @@ func (x *DurationFilter) Match(v *durationpb.Duration) (bool, error) {
 		return d1 > x.GetSup().AsDuration(), nil
 	}
 	return false, nil
+}
+
+func (x *Expression) Fields() (fields []string) {
+	if x == nil || x.Condition == nil {
+		return nil
+	}
+	m := make(map[string]struct{})
+	m[x.Condition.Field] = struct{}{}
+	for _, v := range x.AndExprs {
+		for _, v := range v.Fields() {
+			m[v] = struct{}{}
+		}
+	}
+	for _, v := range x.OrExprs {
+		for _, v := range v.Fields() {
+			m[v] = struct{}{}
+		}
+	}
+	for k := range m {
+		fields = append(fields, k)
+	}
+	sort.Strings(fields)
+	return fields
 }
 
 // Expr is a convenient method so that both Expression and FieldFilter
