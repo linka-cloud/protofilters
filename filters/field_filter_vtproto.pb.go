@@ -437,16 +437,6 @@ func (m *StringFilter) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
-	if m.CaseInsensitive {
-		i--
-		if m.CaseInsensitive {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i--
-		dAtA[i] = 0x20
-	}
 	if vtmsg, ok := m.Condition.(interface {
 		MarshalToVT([]byte) (int, error)
 		SizeVT() int
@@ -458,6 +448,16 @@ func (m *StringFilter) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 				return 0, err
 			}
 		}
+	}
+	if m.CaseInsensitive {
+		i--
+		if m.CaseInsensitive {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x20
 	}
 	return len(dAtA) - i, nil
 }
@@ -507,6 +507,34 @@ func (m *StringFilter_In_) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x1a
 	}
+	return len(dAtA) - i, nil
+}
+func (m *StringFilter_HasPrefix) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *StringFilter_HasPrefix) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i -= len(m.HasPrefix)
+	copy(dAtA[i:], m.HasPrefix)
+	i = encodeVarint(dAtA, i, uint64(len(m.HasPrefix)))
+	i--
+	dAtA[i] = 0x2a
+	return len(dAtA) - i, nil
+}
+func (m *StringFilter_HasSuffix) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *StringFilter_HasSuffix) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i -= len(m.HasSuffix)
+	copy(dAtA[i:], m.HasSuffix)
+	i = encodeVarint(dAtA, i, uint64(len(m.HasSuffix)))
+	i--
+	dAtA[i] = 0x32
 	return len(dAtA) - i, nil
 }
 func (m *NumberFilter_In) MarshalVT() (dAtA []byte, err error) {
@@ -1247,6 +1275,26 @@ func (m *StringFilter_In_) SizeVT() (n int) {
 		l = m.In.SizeVT()
 		n += 1 + l + sov(uint64(l))
 	}
+	return n
+}
+func (m *StringFilter_HasPrefix) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.HasPrefix)
+	n += 1 + l + sov(uint64(l))
+	return n
+}
+func (m *StringFilter_HasSuffix) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.HasSuffix)
+	n += 1 + l + sov(uint64(l))
 	return n
 }
 func (m *NumberFilter_In) SizeVT() (n int) {
@@ -2498,6 +2546,70 @@ func (m *StringFilter) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			m.CaseInsensitive = bool(v != 0)
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HasPrefix", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Condition = &StringFilter_HasPrefix{string(dAtA[iNdEx:postIndex])}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HasSuffix", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Condition = &StringFilter_HasSuffix{string(dAtA[iNdEx:postIndex])}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skip(dAtA[iNdEx:])

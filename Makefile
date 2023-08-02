@@ -47,7 +47,7 @@ gen-proto: bin
 .PHONY: lint
 lint:
 	@goimports -w -local $(MODULE) $(PWD)
-	@gofmt -w $(PWD)
+	@go fmt $(PWD)
 
 .PHONY: tests
 tests: proto

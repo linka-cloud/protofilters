@@ -94,6 +94,102 @@ func StringIEquals(s string) *Filter {
 	})
 }
 
+// StringHasPrefix constructs a string match prefix filter
+func StringHasPrefix(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_HasPrefix{
+				HasPrefix: s,
+			},
+		},
+	)
+}
+
+// StringNotHasPrefix constructs a string not match prefix filter
+func StringNotHasPrefix(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_HasPrefix{
+				HasPrefix: s,
+			},
+		},
+		true,
+	)
+}
+
+// StringIHasPrefix constructs a case insensitive string match prefix filter
+func StringIHasPrefix(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_HasPrefix{
+				HasPrefix: s,
+			},
+			CaseInsensitive: true,
+		},
+	)
+}
+
+// StringNotIHasPrefix constructs a case insensitive string not match prefix filter
+func StringNotIHasPrefix(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_HasPrefix{
+				HasPrefix: s,
+			},
+			CaseInsensitive: true,
+		},
+		true,
+	)
+}
+
+// StringHasSuffix constructs a string match suffix filter
+func StringHasSuffix(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_HasSuffix{
+				HasSuffix: s,
+			},
+		},
+	)
+}
+
+// StringNotHasSuffix constructs a string not match suffix filter
+func StringNotHasSuffix(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_HasSuffix{
+				HasSuffix: s,
+			},
+		},
+		true,
+	)
+}
+
+// StringIHasSuffix constructs a case insensitive string match suffix filter
+func StringIHasSuffix(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_HasSuffix{
+				HasSuffix: s,
+			},
+			CaseInsensitive: true,
+		},
+	)
+}
+
+// StringNotIHasSuffix constructs a case insensitive string not match suffix filter
+func StringNotIHasSuffix(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_HasSuffix{
+				HasSuffix: s,
+			},
+			CaseInsensitive: true,
+		},
+		true,
+	)
+}
+
 // StringRegex constructs a string match regex filter
 func StringRegex(s string) *Filter {
 	return newStringFilter(
@@ -429,6 +525,16 @@ func (x *StringFilter) Match(v *string) (bool, error) {
 			return strings.ToLower(x.GetEquals()) == strings.ToLower(value), nil
 		}
 		return value == x.GetEquals(), nil
+	case *StringFilter_HasPrefix:
+		if insensitive {
+			return strings.HasPrefix(strings.ToLower(value), strings.ToLower(x.GetHasPrefix())), nil
+		}
+		return strings.HasPrefix(value, x.GetHasPrefix()), nil
+	case *StringFilter_HasSuffix:
+		if insensitive {
+			return strings.HasSuffix(strings.ToLower(value), strings.ToLower(x.GetHasSuffix())), nil
+		}
+		return strings.HasSuffix(value, x.GetHasSuffix()), nil
 	case *StringFilter_Regex:
 		reg, err := regexp.Compile(x.GetRegex())
 		if err != nil {

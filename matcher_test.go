@@ -99,6 +99,10 @@ func TestString(t *testing.T) {
 	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
 		"string_value_field": filters.StringRegex(`[a-z](.+)`),
 	}}))
+	assert.True(Match(m, filters.Where("string_value_field", filters.StringHasPrefix("what"))))
+	assert.False(Match(m, filters.Where("string_value_field", filters.StringHasPrefix("noop"))))
+	assert.True(Match(m, filters.Where("string_value_field", filters.StringHasSuffix("ever"))))
+	assert.False(Match(m, filters.Where("string_value_field", filters.StringHasSuffix("noop"))))
 }
 
 func TestEnum(t *testing.T) {

@@ -68,6 +68,8 @@ message StringFilter {
   oneof condition {
     string equals = 1;
     string regex = 2;
+    string has_prefix = 5;
+    string has_suffix = 6;
     In in = 3;
   }
   bool case_insensitive = 4;
