@@ -13,6 +13,19 @@ We do not support backward-compatibility for the alpha releases.
 
 ## Overview
 
+The main filter construct is the *Expression*:
+
+```protobuf
+// Expression represent a complete condition
+// fields are evaluated as the following expression:
+// condition && and_exprs || or_exprs
+message Expression {
+  FieldFilter condition = 1;
+  repeated Expression and_exprs = 2;
+  repeated Expression or_exprs = 3;
+}
+```
+
 The two message filtering types available follow the same pattern as `google.protobuf.FieldMask`:
 
 ```proto
@@ -141,5 +154,4 @@ func main() {
 
 ## TODOs
 
-- [ ] support **and/or** conditions
 - [ ] support more languages
