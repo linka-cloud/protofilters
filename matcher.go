@@ -140,6 +140,15 @@ func (m *matcher) Match(msg proto.Message, f filters.FieldFilterer) (bool, error
 	return ok && andOk || orOk, nil
 }
 
+type result struct {
+	ok  bool
+	err error
+}
+
+func newResult(ok bool, err error) *result {
+	return &result{ok: ok, err: err}
+}
+
 func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error) {
 	if msg == nil {
 		return false, errors.New("message is null")
@@ -147,7 +156,9 @@ func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error
 	if f == nil {
 		return true, nil
 	}
-	for path, filter := range f.Filters {
+
+	rs := make(chan *result, len(f.Filters))
+	fn := func(path string, filter *filters.Filter) (bool, error) {
 		fd, err := m.lookup(msg, path)
 		if err != nil {
 			return false, err
@@ -179,7 +190,28 @@ func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error
 		if !ok {
 			return false, nil
 		}
+		return true, nil
 	}
+
+	for path, filter := range f.Filters {
+		go func(path string, filter *filters.Filter) {
+			rs <- newResult(fn(path, filter))
+		}(path, filter)
+	}
+
+	for i := 0; i < len(f.Filters); i++ {
+		r := <-rs
+		if r.err != nil {
+			return false, r.err
+		}
+		if !r.ok {
+			return false, nil
+		}
+		if i == len(f.Filters)-1 {
+			return r.ok, nil
+		}
+	}
+	// should not reach here
 	return true, nil
 }
 
