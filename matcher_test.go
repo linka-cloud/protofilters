@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -29,6 +30,132 @@ import (
 	"go.linka.cloud/protofilters/filters"
 	test "go.linka.cloud/protofilters/tests/pb"
 )
+
+func TestOptionalsNil(t *testing.T) {
+	tests := []struct {
+		name string
+		m    proto.Message
+		f    filters.FieldFilterer
+		ok   bool
+	}{
+		{
+			name: "empty optional null",
+			m:    &test.Test{},
+			f:    filters.Where("optional_bool_field").Null(),
+			ok:   true,
+		},
+		{
+			name: "empty optional not null",
+			m:    &test.Test{},
+			f:    filters.Where("optional_bool_field").NotNull(),
+			ok:   false,
+		},
+		{
+			name: "empty optional true",
+			m:    &test.Test{},
+			f:    filters.Where("optional_bool_field").True(),
+			ok:   false,
+		},
+		{
+			name: "empty optional false",
+			m:    &test.Test{},
+			f:    filters.Where("optional_bool_field").False(),
+			ok:   false,
+		},
+		{
+			name: "false optional not null",
+			m:    &test.Test{OptionalBoolField: proto.Bool(false)},
+			f:    filters.Where("optional_bool_field").NotNull(),
+			ok:   true,
+		},
+		{
+			name: "false optional null",
+			m:    &test.Test{OptionalBoolField: proto.Bool(false)},
+			f:    filters.Where("optional_bool_field").Null(),
+			ok:   false,
+		},
+		{
+			name: "false optional true",
+			m:    &test.Test{OptionalBoolField: proto.Bool(false)},
+			f:    filters.Where("optional_bool_field").True(),
+			ok:   false,
+		},
+		{
+			name: "false optional false",
+			m:    &test.Test{OptionalBoolField: proto.Bool(false)},
+			f:    filters.Where("optional_bool_field").False(),
+			ok:   true,
+		},
+
+		{
+			name: "empty number optional not null",
+			m:    &test.Test{},
+			f:    filters.Where("optional_number_field").NotNull(),
+			ok:   false,
+		},
+		{
+			name: "empty number optional null",
+			m:    &test.Test{},
+			f:    filters.Where("optional_number_field").Null(),
+			ok:   true,
+		},
+		{
+			name: "number optional not null",
+			m:    &test.Test{OptionalNumberField: proto.Int64(0)},
+			f:    filters.Where("optional_number_field").NotNull(),
+			ok:   true,
+		},
+		{
+			name: "number optional null",
+			m:    &test.Test{OptionalNumberField: proto.Int64(0)},
+			f:    filters.Where("optional_number_field").Null(),
+			ok:   false,
+		},
+		{
+			name: "number optional equals",
+			m:    &test.Test{OptionalNumberField: proto.Int64(0)},
+			f:    filters.Where("optional_number_field").NumberEquals(0),
+			ok:   true,
+		},
+		{
+			name: "number optional not equals",
+			m:    &test.Test{OptionalNumberField: proto.Int64(0)},
+			f:    filters.Where("optional_number_field").NumberNotEquals(0),
+			ok:   false,
+		},
+		{
+			name: "string optional not null",
+			m:    &test.Test{},
+			f:    filters.Where("optional_string_field").NotNull(),
+			ok:   false,
+		},
+		{
+			name: "string optional null",
+			m:    &test.Test{},
+			f:    filters.Where("optional_string_field").Null(),
+			ok:   true,
+		},
+		{
+			name: "empty string optional not null",
+			m:    &test.Test{OptionalStringField: proto.String("")},
+			f:    filters.Where("optional_string_field").NotNull(),
+			ok:   true,
+		},
+		{
+			name: "empty string optional null",
+			m:    &test.Test{OptionalStringField: proto.String("")},
+			f:    filters.Where("optional_string_field").Null(),
+			ok:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ok, err := Match(tt.m, tt.f)
+			require.NoError(t, err)
+			assert.Equal(t, tt.ok, ok)
+		})
+	}
+}
 
 func TestFieldFilter(t *testing.T) {
 	assert := assert.New(t)
@@ -99,10 +226,10 @@ func TestString(t *testing.T) {
 	assert.True(Match(m, &filters.FieldsFilter{Filters: filters.Filters{
 		"string_value_field": filters.StringRegex(`[a-z](.+)`),
 	}}))
-	assert.True(Match(m, filters.Where("string_value_field", filters.StringHasPrefix("what"))))
-	assert.False(Match(m, filters.Where("string_value_field", filters.StringHasPrefix("noop"))))
-	assert.True(Match(m, filters.Where("string_value_field", filters.StringHasSuffix("ever"))))
-	assert.False(Match(m, filters.Where("string_value_field", filters.StringHasSuffix("noop"))))
+	assert.True(Match(m, filters.Where("string_value_field").StringHasPrefix("what")))
+	assert.False(Match(m, filters.Where("string_value_field").StringHasPrefix("noop")))
+	assert.True(Match(m, filters.Where("string_value_field").StringHasSuffix("ever")))
+	assert.False(Match(m, filters.Where("string_value_field").StringHasSuffix("noop")))
 }
 
 func TestEnum(t *testing.T) {
@@ -238,6 +365,47 @@ func TestRepeated(t *testing.T) {
 	}))
 }
 
+func TestSubField(t *testing.T) {
+	assert := assert.New(t)
+	m := &test.Test{
+		MessageField: &test.Test{
+			StringField:         "zero",
+			NumberField:         43,
+			EnumField:           test.Test_TWO,
+			RepeatedStringField: []string{"three", "four"},
+		},
+	}
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "message_field.string_field",
+		Filter: filters.StringIN("one", "two"),
+	}))
+	assert.True(MatchFilters(m, &filters.FieldFilter{
+		Field:  "message_field.string_field",
+		Filter: filters.StringIN("zero", "one"),
+	}))
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "message_field.number_field",
+		Filter: filters.NumberEquals(42),
+	}))
+	assert.True(MatchFilters(m, &filters.FieldFilter{
+		Field:  "message_field.number_field",
+		Filter: filters.NumberEquals(43),
+	}))
+}
+
+func TestSubFieldNil(t *testing.T) {
+	assert := assert.New(t)
+	m := &test.Test{}
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "message_field.number_field",
+		Filter: filters.NumberEquals(43),
+	}))
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "message_field.repeated_string_field",
+		Filter: filters.StringIN("three", "four"),
+	}))
+}
+
 func TestOptional(t *testing.T) {
 	assert := assert.New(t)
 	e := test.Test_Type(42)
@@ -323,12 +491,10 @@ func TestMatchExpression(t *testing.T) {
 			},
 		}},
 	}))
-	f1 := filters.Where("string_field", filters.StringEquals("whatever")).
-		And("number_field", filters.NumberIN(42, 43)).
-		OrE(
-			filters.Where("bool_field", filters.False()).
-				Or("optional_bool_field", filters.False()),
-		)
+	f1 := filters.Where("string_field").StringEquals("whatever").
+		And("number_field").NumberIN(42, 43).
+		Or(filters.Where("bool_field").False()).
+		Or(filters.Where("optional_bool_field").False())
 
 	assert.True(Match(m, f1))
 	f2 := &filters.Expression{
@@ -346,18 +512,16 @@ func TestMatchExpression(t *testing.T) {
 			Condition: &filters.FieldFilter{
 				Field:  "bool_field",
 				Filter: filters.False(),
-			},
-			OrExprs: []*filters.Expression{{
-				Condition: &filters.FieldFilter{
-					Field:  "optional_bool_field",
-					Filter: filters.False(),
-				},
+			}}, {
+			Condition: &filters.FieldFilter{
+				Field:  "optional_bool_field",
+				Filter: filters.False(),
 			}},
-		}},
+		},
 	}
+	assert.Equal(f1.Expr(), f2)
 	assert.True(Match(m, f2))
-	assert.Equal(f1, f2)
-	assert.Equal([]string{"bool_field", "number_field", "optional_bool_field", "string_field"}, f1.Fields())
+	assert.Equal([]string{"bool_field", "number_field", "optional_bool_field", "string_field"}, f1.Expr().Fields())
 	assert.True(Match(m, &filters.Expression{
 		Condition: &filters.FieldFilter{
 			Field:  "string_field",

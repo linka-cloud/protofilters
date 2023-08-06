@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package protofilters
+package reflect
 
 import (
 	"fmt"
@@ -27,7 +27,29 @@ import (
 	"go.linka.cloud/protofilters/filters"
 )
 
-func match(val pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
+// WKType represents a google.protobuf well-known type
+type WKType string
+
+// String implements the Stringer interface
+func (t WKType) String() string {
+	return string(t)
+}
+
+const (
+	Timestamp   WKType = "google.protobuf.Timestamp"
+	Duration    WKType = "google.protobuf.Duration"
+	DoubleValue WKType = "google.protobuf.DoubleValue"
+	FloatValue  WKType = "google.protobuf.FloatValue"
+	Int64Value  WKType = "google.protobuf.Int64Value"
+	UInt64Value WKType = "google.protobuf.UInt64Value"
+	Int32Value  WKType = "google.protobuf.Int32Value"
+	UInt32Value WKType = "google.protobuf.UInt32Value"
+	BoolValue   WKType = "google.protobuf.BoolValue"
+	StringValue WKType = "google.protobuf.StringValue"
+	BytesValue  WKType = "google.protobuf.BytesValue"
+)
+
+func Match(val pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
 	switch f.GetMatch().(type) {
 	case *filters.Filter_String_:
 		return matchString(val, fd, f)
@@ -53,7 +75,7 @@ func matchString(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (b
 		}
 		// return early as the condition will always be false
 		if !rval.IsValid() {
-			return false, nil
+			return checkNot(f, false, nil)
 		}
 		value = proto.String(rval.Message().Get(fd.Message().Fields().Get(0)).String())
 	}
@@ -71,6 +93,11 @@ func matchString(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (b
 }
 
 func matchNumber(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
+	// fast path for float64
+	if val, ok := rval.Interface().(float64); ok {
+		match, err := f.GetNumber().Match(&val)
+		return checkNot(f, match, err)
+	}
 	var val *float64
 	switch fd.Kind() {
 	case pref.Int32Kind,
@@ -118,10 +145,10 @@ func matchBool(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (boo
 		}
 		// return early as the condition will always be false
 		if !rval.IsValid() {
-			return false, nil
+			return checkNot(f, false, nil)
 		}
 		val = proto.Bool(rval.Message().Get(fd.Message().Fields().Get(0)).Bool())
-	} else {
+	} else if !fd.HasOptionalKeyword() || rval.IsValid() {
 		val = proto.Bool(rval.Bool())
 	}
 	match, err := f.GetBool().Match(val)
@@ -136,7 +163,10 @@ func matchNull(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (boo
 	case pref.GroupKind:
 		match = rval.List().Len() == 0
 	default:
-		return false, fmt.Errorf("cannot use null filter on %s", fd.Kind().String())
+		if !fd.HasOptionalKeyword() {
+			return false, fmt.Errorf("cannot use null filter on %s", fd.Kind().String())
+		}
+		match = !rval.IsValid()
 	}
 	return checkNot(f, match, nil)
 }
@@ -146,7 +176,7 @@ func matchTime(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (boo
 		return false, fmt.Errorf("cannot use time filter on %s", fd.Kind().String())
 	}
 	if !rval.IsValid() {
-		return false, nil
+		return checkNot(f, false, nil)
 	}
 	match, err := f.GetTime().Match(&timestamppb.Timestamp{
 		Seconds: rval.Message().Get(fd.Message().Fields().Get(0)).Int(),
@@ -160,7 +190,7 @@ func matchDuration(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) 
 		return false, fmt.Errorf("cannot use duration filter on %s", fd.Kind().String())
 	}
 	if !rval.IsValid() {
-		return false, nil
+		return checkNot(f, false, nil)
 	}
 	rval.Message().Get(fd.Message().Fields().Get(0))
 

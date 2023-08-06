@@ -140,39 +140,39 @@ type stringFieldFilter struct {
 }
 
 func (f stringFieldFilter) Equals(s string) *FieldFilter {
-	return Where(f.field, StringEquals(s))
+	return where(f.field, StringEquals(s))
 }
 
 func (f stringFieldFilter) NotEquals(s string) *FieldFilter {
-	return Where(f.field, StringNotEquals(s))
+	return where(f.field, StringNotEquals(s))
 }
 
 func (f stringFieldFilter) IEquals(s string) *FieldFilter {
-	return Where(f.field, StringIEquals(s))
+	return where(f.field, StringIEquals(s))
 }
 
 func (f stringFieldFilter) NotIEquals(s string) *FieldFilter {
-	return Where(f.field, StringNotIEquals(s))
+	return where(f.field, StringNotIEquals(s))
 }
 
 func (f stringFieldFilter) Regex(s string) *FieldFilter {
-	return Where(f.field, StringRegex(s))
+	return where(f.field, StringRegex(s))
 }
 
 func (f stringFieldFilter) NotRegex(s string) *FieldFilter {
-	return Where(f.field, StringNotRegex(s))
+	return where(f.field, StringNotRegex(s))
 }
 
 func (f stringFieldFilter) IN(s ...string) *FieldFilter {
-	return Where(f.field, StringIN(s...))
+	return where(f.field, StringIN(s...))
 }
 
 func (f stringFieldFilter) NotIN(s ...string) *FieldFilter {
-	return Where(f.field, StringNotIN(s...))
+	return where(f.field, StringNotIN(s...))
 }
 
 func (f stringFieldFilter) Null() *FieldFilter {
-	return Where(f.field, Null())
+	return where(f.field, Null())
 }
 
 type numberFieldFilterer struct {
@@ -180,27 +180,27 @@ type numberFieldFilterer struct {
 }
 
 func (f numberFieldFilterer) Equals(n float64) *FieldFilter {
-	return Where(f.field, NumberEquals(n))
+	return where(f.field, NumberEquals(n))
 }
 
 func (f numberFieldFilterer) Inf(n float64) *FieldFilter {
-	return Where(f.field, NumberInf(n))
+	return where(f.field, NumberInf(n))
 }
 
 func (f numberFieldFilterer) Sup(n float64) *FieldFilter {
-	return Where(f.field, NumberSup(n))
+	return where(f.field, NumberSup(n))
 }
 
 func (f numberFieldFilterer) IN(n ...float64) *FieldFilter {
-	return Where(f.field, NumberIN(n...))
+	return where(f.field, NumberIN(n...))
 }
 
 func (f numberFieldFilterer) NotIN(n ...float64) *FieldFilter {
-	return Where(f.field, NumberNotIN(n...))
+	return where(f.field, NumberNotIN(n...))
 }
 
 func (f numberFieldFilterer) Null() *FieldFilter {
-	return Where(f.field, Null())
+	return where(f.field, Null())
 }
 
 type boolFieldFilterer struct {
@@ -208,15 +208,15 @@ type boolFieldFilterer struct {
 }
 
 func (f boolFieldFilterer) True() *FieldFilter {
-	return Where(f.field, True())
+	return where(f.field, True())
 }
 
 func (f boolFieldFilterer) False() *FieldFilter {
-	return Where(f.field, False())
+	return where(f.field, False())
 }
 
 func (f boolFieldFilterer) Null() *FieldFilter {
-	return Where(f.field, Null())
+	return where(f.field, Null())
 }
 
 type nullFieldFilterer struct {
@@ -224,7 +224,7 @@ type nullFieldFilterer struct {
 }
 
 func (n nullFieldFilterer) Null() *FieldFilter {
-	return Where(n.field, Null())
+	return where(n.field, Null())
 }
 
 type durationFielFilterer struct {
@@ -232,23 +232,23 @@ type durationFielFilterer struct {
 }
 
 func (f durationFielFilterer) Equals(d time.Duration) *FieldFilter {
-	return Where(f.field, DurationEquals(d))
+	return where(f.field, DurationEquals(d))
 }
 
 func (f durationFielFilterer) NotEquals(d time.Duration) *FieldFilter {
-	return Where(f.field, DurationNotEquals(d))
+	return where(f.field, DurationNotEquals(d))
 }
 
 func (f durationFielFilterer) Sup(d time.Duration) *FieldFilter {
-	return Where(f.field, DurationSup(d))
+	return where(f.field, DurationSup(d))
 }
 
 func (f durationFielFilterer) Inf(d time.Duration) *FieldFilter {
-	return Where(f.field, DurationInf(d))
+	return where(f.field, DurationInf(d))
 }
 
 func (f durationFielFilterer) Null() *FieldFilter {
-	return Where(f.field, Null())
+	return where(f.field, Null())
 }
 
 type timeFieldFilterer struct {
@@ -256,21 +256,21 @@ type timeFieldFilterer struct {
 }
 
 func (f timeFieldFilterer) Equals(t time.Time) *FieldFilter {
-	return Where(f.field, TimeEquals(t))
+	return where(f.field, TimeEquals(t))
 }
 
 func (f timeFieldFilterer) NotEquals(t time.Time) *FieldFilter {
-	return Where(f.field, TimeNotEquals(t))
+	return where(f.field, TimeNotEquals(t))
 }
 
 func (f timeFieldFilterer) After(t time.Time) *FieldFilter {
-	return Where(f.field, TimeAfter(t))
+	return where(f.field, TimeAfter(t))
 }
 
 func (f timeFieldFilterer) Before(t time.Time) *FieldFilter {
-	return Where(f.field, TimeBefore(t))
+	return where(f.field, TimeBefore(t))
 }
 
 func (f timeFieldFilterer) Null() *FieldFilter {
-	return Where(f.field, Null())
+	return where(f.field, Null())
 }

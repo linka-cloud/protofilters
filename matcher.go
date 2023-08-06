@@ -26,28 +26,7 @@ import (
 	pref "google.golang.org/protobuf/reflect/protoreflect"
 
 	"go.linka.cloud/protofilters/filters"
-)
-
-// WKType represents a google.protobuf well-known type
-type WKType string
-
-// String implements the Stringer interface
-func (t WKType) String() string {
-	return string(t)
-}
-
-const (
-	Timestamp   WKType = "google.protobuf.Timestamp"
-	Duration    WKType = "google.protobuf.Duration"
-	DoubleValue WKType = "google.protobuf.DoubleValue"
-	FloatValue  WKType = "google.protobuf.FloatValue"
-	Int64Value  WKType = "google.protobuf.Int64Value"
-	UInt64Value WKType = "google.protobuf.UInt64Value"
-	Int32Value  WKType = "google.protobuf.Int32Value"
-	UInt32Value WKType = "google.protobuf.UInt32Value"
-	BoolValue   WKType = "google.protobuf.BoolValue"
-	StringValue WKType = "google.protobuf.StringValue"
-	BytesValue  WKType = "google.protobuf.BytesValue"
+	"go.linka.cloud/protofilters/reflect"
 )
 
 // Matcher provides a way to match proto.Message against protofilters.Filter
@@ -71,7 +50,7 @@ type CachingMatcher interface {
 
 // NewMatcher creates a CachingMatcher
 func NewMatcher() CachingMatcher {
-	return &matcher{cache: make(map[string]pref.FieldDescriptor)}
+	return &matcher{cache: make(map[string][]pref.FieldDescriptor)}
 }
 
 var defaultMatcher = NewMatcher()
@@ -93,7 +72,7 @@ func MatchExpression(msg proto.Message, expr *filters.Expression) (bool, error) 
 
 type matcher struct {
 	mu    sync.RWMutex
-	cache map[string]pref.FieldDescriptor
+	cache map[string][]pref.FieldDescriptor
 }
 
 // Deprecated: MatchExpression match proto.Message against the given expression, Match should be used instead
@@ -159,15 +138,26 @@ func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error
 
 	rs := make(chan *result, len(f.Filters))
 	fn := func(path string, filter *filters.Filter) (bool, error) {
-		fd, err := m.lookup(msg, path)
+		fds, err := m.lookup(msg, path)
 		if err != nil {
 			return false, err
 		}
-		rval := msg.ProtoReflect().Get(fd)
+		var (
+			fd   pref.FieldDescriptor
+			rval pref.Value
+		)
+		for i, v := range fds {
+			fd = v
+			if i > 0 {
+				rval = rval.Message().Get(fd)
+			} else {
+				rval = msg.ProtoReflect().Get(fd)
+			}
+		}
 		if fd.IsList() {
 			list := rval.List()
 			for i := 0; i < list.Len(); i++ {
-				match, err := match(list.Get(i), fd, filter)
+				match, err := reflect.Match(list.Get(i), fd, filter)
 				if err != nil {
 					return false, err
 				}
@@ -183,14 +173,14 @@ func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error
 		if fd.IsMap() {
 			return false, errors.New("matching against map is not supported")
 		}
-		ok, err := match(rval, fd, filter)
+		if fd.HasOptionalKeyword() && !msg.ProtoReflect().Has(fd) {
+			rval = pref.Value{}
+		}
+		ok, err := reflect.Match(rval, fd, filter)
 		if err != nil {
 			return false, err
 		}
-		if !ok {
-			return false, nil
-		}
-		return true, nil
+		return ok, nil
 	}
 
 	for path, filter := range f.Filters {
@@ -222,14 +212,14 @@ func (m *matcher) MatchFilters(msg proto.Message, fs ...*filters.FieldFilter) (b
 
 func (m *matcher) Clear() {
 	m.mu.Lock()
-	m.cache = make(map[string]pref.FieldDescriptor)
+	m.cache = make(map[string][]pref.FieldDescriptor)
 	m.mu.Unlock()
 }
 
-func (m *matcher) lookup(msg proto.Message, path string) (pref.FieldDescriptor, error) {
+func (m *matcher) lookup(msg proto.Message, path string) ([]pref.FieldDescriptor, error) {
 	if m.cache == nil {
 		m.mu.Lock()
-		m.cache = make(map[string]pref.FieldDescriptor)
+		m.cache = make(map[string][]pref.FieldDescriptor)
 		m.mu.Unlock()
 	}
 	key := fmt.Sprintf("%s.%s", msg.ProtoReflect().Descriptor().FullName(), path)
@@ -241,7 +231,7 @@ func (m *matcher) lookup(msg proto.Message, path string) (pref.FieldDescriptor, 
 	}
 	md0 := msg.ProtoReflect().Descriptor()
 	md := md0
-	fd, ok = rangeFields(path, func(field string) (pref.FieldDescriptor, bool) {
+	fds, ok := rangeFields(path, func(field string) (pref.FieldDescriptor, bool) {
 		// Search the field within the message.
 		if md == nil {
 			return nil, false // not within a message
@@ -273,15 +263,16 @@ func (m *matcher) lookup(msg proto.Message, path string) (pref.FieldDescriptor, 
 		return nil, fmt.Errorf("%s does not contain '%s'", md0.FullName(), path)
 	}
 	m.mu.Lock()
-	m.cache[key] = fd
+	m.cache[key] = fds
 	m.mu.Unlock()
-	return fd, nil
+	return fds, nil
 }
 
 // rangeFields is like strings.Split(path, "."), but avoids allocations by
 // iterating over each field in place and calling a iterator function.
 // (taken from "google.golang.org/protobuf/types/known/fieldmaskpb")
-func rangeFields(path string, f func(field string) (pref.FieldDescriptor, bool)) (pref.FieldDescriptor, bool) {
+func rangeFields(path string, f func(field string) (pref.FieldDescriptor, bool)) ([]pref.FieldDescriptor, bool) {
+	var fds []pref.FieldDescriptor
 	for {
 		var field string
 		if i := strings.IndexByte(path, '.'); i >= 0 {
@@ -293,8 +284,9 @@ func rangeFields(path string, f func(field string) (pref.FieldDescriptor, bool))
 		if !ok {
 			return nil, false
 		}
+		fds = append(fds, v)
 		if len(path) == 0 {
-			return v, true
+			return fds, true
 		}
 		path = strings.TrimPrefix(path, ".")
 	}
