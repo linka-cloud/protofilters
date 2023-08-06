@@ -23,43 +23,32 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-type Field struct {
-	Value       protoreflect.Value
-	Keys        []string
-	Descriptors []protoreflect.FieldDescriptor
-}
-
-func (f *Field) add(k string) {
-	f.Keys = append(f.Keys, k)
-}
-
-func (f *Field) remove(k string) {
-	for i, v := range f.Keys {
-		if k == v {
-			f.Keys = append(f.Keys[:i], f.Keys[i+1:]...)
-			return
-		}
-	}
-}
-
+// Txer is an interface for a transactioner.
 type Txer interface {
+	// Tx returns a transaction.
 	Tx(ctx context.Context) (Tx, error)
 }
 
+// Tx is an interface for a transaction.
 type Tx interface {
 	Store
+	// Commit commits the transaction.
 	Commit(ctx context.Context) error
+	// Close closes the transaction.
+	// If the transaction has not been committed, it will be rolled back.
+	// If the transaction has been committed, it should be a no-op.
 	Close() error
 }
 
-type FieldReader interface {
-	Get(ctx context.Context, f protoreflect.Name) ([]*Field, bool, error)
-}
-
+// Store is an interface for storing and retrieving protobuf message fields.
 type Store interface {
+	// For returns a FieldReader for the given message type.
 	For(ctx context.Context, t protoreflect.FullName) (FieldReader, error)
+	// Add adds a value to the store for the given key and field descriptor.
 	Add(ctx context.Context, k string, v protoreflect.Value, fds ...protoreflect.FieldDescriptor) error
+	// Remove removes a value from the store for the given key and field descriptor.
 	Remove(ctx context.Context, k string, f protoreflect.FieldDescriptor, v protoreflect.Value) error
+	// Clear removes all values from the store for the given key.
 	Clear(ctx context.Context, k string) error
 }
 
@@ -84,18 +73,22 @@ func (n noopTX) Close() error {
 }
 
 type fieldReader struct {
-	m map[protoreflect.Name][]*Field
+	m map[protoreflect.Name][]*field
 }
 
-func (f *fieldReader) Get(_ context.Context, n protoreflect.Name) ([]*Field, bool, error) {
-	out, ok := f.m[n]
-	return out, ok, nil
+func (f *fieldReader) Get(_ context.Context, n protoreflect.Name) (Iterator[Field], bool, error) {
+	var fields []Field
+	v, ok := f.m[n]
+	for _, v := range v {
+		fields = append(fields, v)
+	}
+	return &sliceIterator[Field]{slice: fields}, ok, nil
 }
 
-type store map[protoreflect.FullName][]*Field
+type store map[protoreflect.FullName][]*field
 
 func (s store) For(_ context.Context, t protoreflect.FullName) (FieldReader, error) {
-	out := make(map[protoreflect.Name][]*Field)
+	out := make(map[protoreflect.Name][]*field)
 	for k, v := range s {
 		if strings.HasPrefix(string(k), string(t)) {
 			// +1 for the dot
@@ -114,18 +107,18 @@ func (s store) Add(_ context.Context, k string, v protoreflect.Value, fds ...pro
 		n = n.Append(v.Name())
 	}
 	if _, ok := s[n]; !ok {
-		s[n] = make([]*Field, 0)
+		s[n] = make([]*field, 0)
 	}
 	for _, fi := range s[n] {
-		if fi.Value.Interface() == v.Interface() {
+		if fi.value.Interface() == v.Interface() {
 			fi.add(k)
 			return nil
 		}
 	}
-	s[n] = append(s[n], &Field{
-		Value:       v,
-		Keys:        []string{k},
-		Descriptors: fds,
+	s[n] = append(s[n], &field{
+		value:       v,
+		keys:        []string{k},
+		descriptors: fds,
 	})
 	return nil
 }
@@ -135,7 +128,7 @@ func (s store) Remove(_ context.Context, k string, f protoreflect.FieldDescripto
 		return nil
 	}
 	for _, fi := range s[f.FullName()] {
-		if fi.Value.Interface() == v.Interface() {
+		if fi.value.Interface() == v.Interface() {
 			fi.remove(k)
 			return nil
 		}

@@ -33,12 +33,19 @@ func All(_ context.Context, _ ...protoreflect.FieldDescriptor) (bool, error) {
 
 type Func func(ctx context.Context, fds ...protoreflect.FieldDescriptor) (bool, error)
 
-type Index struct {
+type Index interface {
+	Insert(ctx context.Context, k string, m proto.Message) error
+	Update(ctx context.Context, k string, m proto.Message) error
+	Remove(ctx context.Context, k string) error
+	Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, error)
+}
+
+type index struct {
 	store Txer
 	fn    Func
 }
 
-func New(s Store, fn Func) *Index {
+func New(s Store, fn Func) Index {
 	if fn == nil {
 		fn = All
 	}
@@ -49,13 +56,13 @@ func New(s Store, fn Func) *Index {
 	if !ok {
 		x = &fakeTxer{Store: s}
 	}
-	return &Index{
+	return &index{
 		store: x,
 		fn:    fn,
 	}
 }
 
-func (i *Index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds ...protoreflect.FieldDescriptor) error {
+func (i *index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds ...protoreflect.FieldDescriptor) error {
 	f := m.ProtoReflect().Descriptor().Fields()
 	for j := 0; j < f.Len(); j++ {
 		fd := f.Get(j)
@@ -101,7 +108,7 @@ func (i *Index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds
 }
 
 // Index indexes a message fields with the given key.
-func (i *Index) Index(ctx context.Context, k string, m proto.Message) error {
+func (i *index) Insert(ctx context.Context, k string, m proto.Message) error {
 	tx, err := i.store.Tx(ctx)
 	if err != nil {
 		return err
@@ -113,7 +120,7 @@ func (i *Index) Index(ctx context.Context, k string, m proto.Message) error {
 	return tx.Commit(ctx)
 }
 
-func (i *Index) Update(ctx context.Context, k string, m proto.Message) error {
+func (i *index) Update(ctx context.Context, k string, m proto.Message) error {
 	tx, err := i.store.Tx(ctx)
 	if err != nil {
 		return err
@@ -134,7 +141,7 @@ func (i *Index) Update(ctx context.Context, k string, m proto.Message) error {
 	return tx.Commit(ctx)
 }
 
-func (i *Index) Remove(ctx context.Context, k string) error {
+func (i *index) Remove(ctx context.Context, k string) error {
 	tx, err := i.store.Tx(ctx)
 	if err != nil {
 		return err
@@ -146,34 +153,47 @@ func (i *Index) Remove(ctx context.Context, k string) error {
 	return tx.Commit(ctx)
 }
 
-func (i *Index) doFind(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullName, f *filters.FieldFilter) (*sroar.Bitmap, error) {
+func (i *index) doFind(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullName, f *filters.FieldFilter) (*sroar.Bitmap, error) {
 	fds, err := tx.For(ctx, t)
 	if err != nil {
 		return nil, err
 	}
 
-	fi, ok, err := fds.Get(ctx, protoreflect.Name(f.Field))
+	fit, ok, err := fds.Get(ctx, protoreflect.Name(f.Field))
 	if !ok {
 		return nil, nil
 	}
 	b := sroar.NewBitmap()
-	for _, v2 := range fi {
-		fd := v2.Descriptors[len(v2.Descriptors)-1]
-		ok, err := reflect.Match(v2.Value, fd, f.Filter)
+	for fit.Next() {
+		v, err := fit.Value()
+		if err != nil {
+			return nil, err
+		}
+		ds := v.Descriptors()
+		fd := ds[len(ds)-1]
+		ok, err := reflect.Match(v.Value(), fd, f.Filter)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
 			continue
 		}
-		for _, k := range v2.Keys {
-			b.Set(r.index(k))
+		it, err := v.Keys(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for it.Next() {
+			v, err := it.Value()
+			if err != nil {
+				return nil, err
+			}
+			b.Set(r.index(v))
 		}
 	}
 	return b, nil
 }
 
-func (i *Index) find(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullName, f filters.FieldFilterer) (*sroar.Bitmap, error) {
+func (i *index) find(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullName, f filters.FieldFilterer) (*sroar.Bitmap, error) {
 	expr := f.Expr()
 	b, err := i.doFind(ctx, tx, r, t, expr.Condition)
 	if err != nil {
@@ -196,7 +216,7 @@ func (i *Index) find(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullN
 	return b, nil
 }
 
-func (i *Index) Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, error) {
+func (i *index) Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, error) {
 	if f == nil || f.Expr() == nil {
 		return nil, nil
 	}

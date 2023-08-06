@@ -75,7 +75,7 @@ func TestIndex(t *testing.T) {
 	var d time.Duration
 	for _, v := range ms {
 		id := uuid.New().String()
-		require.NoError(t, i.Index(ctx, id, v))
+		require.NoError(t, i.Insert(ctx, id, v))
 		n := time.Now()
 		ok, err := protofilters.Match(v, f1)
 		d += time.Since(n)
