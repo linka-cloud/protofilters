@@ -31,12 +31,20 @@ func All(_ context.Context, _ ...protoreflect.FieldDescriptor) (bool, error) {
 	return true, nil
 }
 
+// Func is a function that is called to determine if a field should be indexed
+// It takes a context and a list of field descriptors that represent the path to the field
+// It returns a bool indicating if the field should be indexed or not and an error if any
 type Func func(ctx context.Context, fds ...protoreflect.FieldDescriptor) (bool, error)
 
+// Index is a protobuf message index
 type Index interface {
+	// Insert inserts and indexes the given message with the given key
 	Insert(ctx context.Context, k string, m proto.Message) error
+	// Update updates the index for the given message with the given key
 	Update(ctx context.Context, k string, m proto.Message) error
+	// Remove removes the given key from the index
 	Remove(ctx context.Context, k string) error
+	// Find returns the keys of the messages that match the given FieldFilterer
 	Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, error)
 }
 
@@ -45,6 +53,9 @@ type index struct {
 	fn    Func
 }
 
+// New creates a new index using the given store and index function
+// If the store is nil, a new in-memory store is created
+// If the index function is nil, all fields are indexed
 func New(s Store, fn Func) Index {
 	if fn == nil {
 		fn = All
