@@ -1,0 +1,247 @@
+/*
+ Copyright 2021 Linka Cloud  All rights reserved.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+*/
+
+package index
+
+import (
+	"context"
+
+	"github.com/dgraph-io/sroar"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"go.linka.cloud/protofilters/filters"
+	"go.linka.cloud/protofilters/reflect"
+)
+
+func All(_ context.Context, _ ...protoreflect.FieldDescriptor) (bool, error) {
+	return true, nil
+}
+
+type Func func(ctx context.Context, fds ...protoreflect.FieldDescriptor) (bool, error)
+
+type Index struct {
+	store Txer
+	fn    Func
+}
+
+func New(s Store, fn Func) *Index {
+	if fn == nil {
+		fn = All
+	}
+	if s == nil {
+		s = make(store)
+	}
+	x, ok := any(s).(Txer)
+	if !ok {
+		x = &fakeTxer{Store: s}
+	}
+	return &Index{
+		store: x,
+		fn:    fn,
+	}
+}
+
+func (i *Index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds ...protoreflect.FieldDescriptor) error {
+	f := m.ProtoReflect().Descriptor().Fields()
+	for j := 0; j < f.Len(); j++ {
+		fd := f.Get(j)
+		fds := append(fds, fd)
+		ok, err := i.fn(ctx, fds...)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		rval := m.ProtoReflect().Get(fd)
+		if fd.Kind() == protoreflect.MessageKind {
+			if !rval.Message().IsValid() {
+				continue
+			}
+			m := rval.Message().Interface()
+			if err := i.index(ctx, tx, k, m.(proto.Message), fds...); err != nil {
+				return err
+			}
+			continue
+		}
+		if fd.IsList() {
+			list := rval.List()
+			for j2 := 0; j2 < list.Len(); j2++ {
+				if err := tx.Add(ctx, k, list.Get(j2), fds...); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if fd.IsMap() {
+			continue
+		}
+		if fd.HasOptionalKeyword() && !m.ProtoReflect().Has(fd) {
+			rval = protoreflect.Value{}
+		}
+		if err := tx.Add(ctx, k, rval, fds...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Index indexes a message fields with the given key.
+func (i *Index) Index(ctx context.Context, k string, m proto.Message) error {
+	tx, err := i.store.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Close()
+	if err := i.index(ctx, tx, k, m); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (i *Index) Update(ctx context.Context, k string, m proto.Message) error {
+	tx, err := i.store.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Close()
+	f := m.ProtoReflect().Descriptor().Fields()
+	for j := 0; j < f.Len(); j++ {
+		fd := f.Get(j)
+		if !fd.IsList() {
+			if err := tx.Remove(ctx, k, fd, m.ProtoReflect().Get(fd)); err != nil {
+				return err
+			}
+		}
+	}
+	if err := i.index(ctx, tx, k, m); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (i *Index) Remove(ctx context.Context, k string) error {
+	tx, err := i.store.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Close()
+	if err := tx.Clear(ctx, k); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (i *Index) doFind(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullName, f *filters.FieldFilter) (*sroar.Bitmap, error) {
+	fds, err := tx.For(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+
+	fi, ok, err := fds.Get(ctx, protoreflect.Name(f.Field))
+	if !ok {
+		return nil, nil
+	}
+	b := sroar.NewBitmap()
+	for _, v2 := range fi {
+		fd := v2.Descriptors[len(v2.Descriptors)-1]
+		ok, err := reflect.Match(v2.Value, fd, f.Filter)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		for _, k := range v2.Keys {
+			b.Set(r.index(k))
+		}
+	}
+	return b, nil
+}
+
+func (i *Index) find(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullName, f filters.FieldFilterer) (*sroar.Bitmap, error) {
+	expr := f.Expr()
+	b, err := i.doFind(ctx, tx, r, t, expr.Condition)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range expr.AndExprs {
+		b2, err := i.find(ctx, tx, r, t, v)
+		if err != nil {
+			return nil, err
+		}
+		b.And(b2)
+	}
+	for _, v := range expr.OrExprs {
+		b2, err := i.find(ctx, tx, r, t, v)
+		if err != nil {
+			return nil, err
+		}
+		b.Or(b2)
+	}
+	return b, nil
+}
+
+func (i *Index) Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, error) {
+	if f == nil || f.Expr() == nil {
+		return nil, nil
+	}
+	tx, err := i.store.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Close()
+	r := newKeyReg()
+	b, err := i.find(ctx, tx, r, t, f)
+	if err != nil {
+		return nil, err
+	}
+	return r.keysFor(b.ToArray()), nil
+}
+
+type keyReg struct {
+	keys []string
+}
+
+func newKeyReg() *keyReg {
+	return &keyReg{
+		// size one to skip index 0
+		keys: make([]string, 1),
+	}
+}
+
+func (r *keyReg) index(k string) uint64 {
+	for i, v := range r.keys {
+		if v == k {
+			return uint64(i)
+		}
+	}
+	r.keys = append(r.keys, k)
+	return uint64(len(r.keys) - 1)
+}
+
+func (r *keyReg) key(i uint64) string {
+	return r.keys[i]
+}
+
+func (r *keyReg) keysFor(i []uint64) []string {
+	out := make([]string, len(i))
+	for j, v := range i {
+		out[j] = r.key(v)
+	}
+	return out
+}
