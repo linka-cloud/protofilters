@@ -136,73 +136,62 @@ func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error
 		return true, nil
 	}
 
-	rs := make(chan *result, len(f.Filters))
-	fn := func(path string, filter *filters.Filter) (bool, error) {
-		fds, err := m.lookup(msg, path)
-		if err != nil {
-			return false, err
-		}
-		var (
-			fd   pref.FieldDescriptor
-			rval pref.Value
-		)
-		for i, v := range fds {
-			fd = v
-			if i > 0 {
-				rval = rval.Message().Get(fd)
-			} else {
-				rval = msg.ProtoReflect().Get(fd)
-			}
-		}
-		if fd.IsList() {
-			list := rval.List()
-			for i := 0; i < list.Len(); i++ {
-				match, err := reflect.Match(list.Get(i), fd, filter)
-				if err != nil {
-					return false, err
-				}
-				if filter.GetNot() && !match {
-					return false, nil
-				}
-				if !filter.GetNot() && match {
-					return true, nil
-				}
-			}
-			return false, nil
-		}
-		if fd.IsMap() {
-			return false, errors.New("matching against map is not supported")
-		}
-		if fd.HasOptionalKeyword() && !msg.ProtoReflect().Has(fd) {
-			rval = pref.Value{}
-		}
-		ok, err := reflect.Match(rval, fd, filter)
-		if err != nil {
-			return false, err
-		}
-		return ok, nil
-	}
-
 	for path, filter := range f.Filters {
-		go func(path string, filter *filters.Filter) {
-			rs <- newResult(fn(path, filter))
-		}(path, filter)
-	}
-
-	for i := 0; i < len(f.Filters); i++ {
-		r := <-rs
-		if r.err != nil {
-			return false, r.err
+		ok, err := m.matchFilter(msg, path, filter)
+		if err != nil {
+			return false, err
 		}
-		if !r.ok {
+		if !ok {
 			return false, nil
 		}
-		if i == len(f.Filters)-1 {
-			return r.ok, nil
+	}
+	return true, nil
+}
+
+func (m *matcher) matchFilter(msg proto.Message, path string, filter *filters.Filter) (bool, error) {
+	fds, err := m.lookup(msg, path)
+	if err != nil {
+		return false, err
+	}
+	var (
+		fd   pref.FieldDescriptor
+		rval pref.Value
+	)
+	for i, v := range fds {
+		fd = v
+		if i > 0 {
+			rval = rval.Message().Get(fd)
+		} else {
+			rval = msg.ProtoReflect().Get(fd)
 		}
 	}
-	// should not reach here
-	return true, nil
+	if fd.IsList() {
+		list := rval.List()
+		for i := 0; i < list.Len(); i++ {
+			match, err := reflect.Match(list.Get(i), fd, filter)
+			if err != nil {
+				return false, err
+			}
+			if filter.GetNot() && !match {
+				return false, nil
+			}
+			if !filter.GetNot() && match {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	if fd.IsMap() {
+		return false, errors.New("matching against map is not supported")
+	}
+	if fd.HasOptionalKeyword() && !msg.ProtoReflect().Has(fd) {
+		rval = pref.Value{}
+	}
+	ok, err := reflect.Match(rval, fd, filter)
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
 }
 
 func (m *matcher) MatchFilters(msg proto.Message, fs ...*filters.FieldFilter) (bool, error) {
@@ -252,7 +241,7 @@ func (m *matcher) lookup(msg proto.Message, path string) ([]pref.FieldDescriptor
 		// Identify the next message to search within.
 		md = fd.Message() // may be nil
 
-		// Repeated fields are only allowed at the last postion.
+		// Repeated fields are only allowed at the last position.
 		if fd.IsList() || fd.IsMap() {
 			md = nil
 		}

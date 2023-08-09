@@ -34,7 +34,7 @@ message Test {
   Type enum_field = 4;
   Test message_field = 5;
   repeated string repeated_string_field = 6;
-  repeated Type repeated_message_field = 7;
+  repeated Test repeated_message_field = 7;
   google.protobuf.Int64Value number_value_field = 8;
   google.protobuf.StringValue string_value_field = 9;
   google.protobuf.BoolValue bool_value_field = 10;

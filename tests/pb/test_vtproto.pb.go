@@ -193,25 +193,16 @@ func (m *Test) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		dAtA[i] = 0x42
 	}
 	if len(m.RepeatedMessageField) > 0 {
-		var pksize2 int
-		for _, num := range m.RepeatedMessageField {
-			pksize2 += sov(uint64(num))
-		}
-		i -= pksize2
-		j1 := i
-		for _, num1 := range m.RepeatedMessageField {
-			num := uint64(num1)
-			for num >= 1<<7 {
-				dAtA[j1] = uint8(uint64(num)&0x7f | 0x80)
-				num >>= 7
-				j1++
+		for iNdEx := len(m.RepeatedMessageField) - 1; iNdEx >= 0; iNdEx-- {
+			size, err := m.RepeatedMessageField[iNdEx].MarshalToSizedBufferVT(dAtA[:i])
+			if err != nil {
+				return 0, err
 			}
-			dAtA[j1] = uint8(num)
-			j1++
+			i -= size
+			i = encodeVarint(dAtA, i, uint64(size))
+			i--
+			dAtA[i] = 0x3a
 		}
-		i = encodeVarint(dAtA, i, uint64(pksize2))
-		i--
-		dAtA[i] = 0x3a
 	}
 	if len(m.RepeatedStringField) > 0 {
 		for iNdEx := len(m.RepeatedStringField) - 1; iNdEx >= 0; iNdEx-- {
@@ -303,11 +294,10 @@ func (m *Test) SizeVT() (n int) {
 		}
 	}
 	if len(m.RepeatedMessageField) > 0 {
-		l = 0
 		for _, e := range m.RepeatedMessageField {
-			l += sov(uint64(e))
+			l = e.SizeVT()
+			n += 1 + l + sov(uint64(l))
 		}
-		n += 1 + sov(uint64(l)) + l
 	}
 	if m.NumberValueField != nil {
 		if size, ok := interface{}(m.NumberValueField).(interface {
@@ -572,74 +562,39 @@ func (m *Test) UnmarshalVT(dAtA []byte) error {
 			m.RepeatedStringField = append(m.RepeatedStringField, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 7:
-			if wireType == 0 {
-				var v Test_Type
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return ErrIntOverflow
-					}
-					if iNdEx >= l {
-						return io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					v |= Test_Type(b&0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				m.RepeatedMessageField = append(m.RepeatedMessageField, v)
-			} else if wireType == 2 {
-				var packedLen int
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return ErrIntOverflow
-					}
-					if iNdEx >= l {
-						return io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					packedLen |= int(b&0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				if packedLen < 0 {
-					return ErrInvalidLength
-				}
-				postIndex := iNdEx + packedLen
-				if postIndex < 0 {
-					return ErrInvalidLength
-				}
-				if postIndex > l {
-					return io.ErrUnexpectedEOF
-				}
-				var elementCount int
-				if elementCount != 0 && len(m.RepeatedMessageField) == 0 {
-					m.RepeatedMessageField = make([]Test_Type, 0, elementCount)
-				}
-				for iNdEx < postIndex {
-					var v Test_Type
-					for shift := uint(0); ; shift += 7 {
-						if shift >= 64 {
-							return ErrIntOverflow
-						}
-						if iNdEx >= l {
-							return io.ErrUnexpectedEOF
-						}
-						b := dAtA[iNdEx]
-						iNdEx++
-						v |= Test_Type(b&0x7F) << shift
-						if b < 0x80 {
-							break
-						}
-					}
-					m.RepeatedMessageField = append(m.RepeatedMessageField, v)
-				}
-			} else {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RepeatedMessageField", wireType)
 			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RepeatedMessageField = append(m.RepeatedMessageField, &Test{})
+			if err := m.RepeatedMessageField[len(m.RepeatedMessageField)-1].UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NumberValueField", wireType)

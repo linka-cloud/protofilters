@@ -86,17 +86,11 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds
 			continue
 		}
 		rval := m.ProtoReflect().Get(fd)
-		if fd.Kind() == protoreflect.MessageKind {
-			if !rval.Message().IsValid() {
+		if fd.IsList() {
+			// we don't index lists of messages
+			if fd.Kind() == protoreflect.MessageKind {
 				continue
 			}
-			m := rval.Message().Interface()
-			if err := i.index(ctx, tx, k, m.(proto.Message), fds...); err != nil {
-				return err
-			}
-			continue
-		}
-		if fd.IsList() {
 			list := rval.List()
 			for j2 := 0; j2 < list.Len(); j2++ {
 				if err := tx.Add(ctx, k, list.Get(j2), fds...); err != nil {
@@ -106,6 +100,16 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds
 			continue
 		}
 		if fd.IsMap() {
+			continue
+		}
+		if fd.Kind() == protoreflect.MessageKind {
+			if !rval.Message().IsValid() {
+				continue
+			}
+			m := rval.Message().Interface()
+			if err := i.index(ctx, tx, k, m.(proto.Message), fds...); err != nil {
+				return err
+			}
 			continue
 		}
 		if fd.HasOptionalKeyword() && !m.ProtoReflect().Has(fd) {
@@ -118,7 +122,7 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds
 	return nil
 }
 
-// Index indexes a message fields with the given key.
+// Insert indexes a message fields with the given key.
 func (i *index) Insert(ctx context.Context, k string, m proto.Message) error {
 	tx, err := i.store.Tx(ctx)
 	if err != nil {

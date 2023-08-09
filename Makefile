@@ -26,7 +26,7 @@ INCLUDE_PROTO_PATH = -I$(PROTO_BASE_PATH) \
 	-I $(shell go list -m -f {{.Dir}} google.golang.org/protobuf)
 
 bin:
-	@go install github.com/golang/protobuf/protoc-gen-go
+	@go install google.golang.org/protobuf/cmd/protoc-gen-go
 	@go install github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto
 
 clean:
