@@ -73,7 +73,9 @@ func TestIndex(t *testing.T) {
 	i := New(nil, nil)
 	var matches []string
 	var d time.Duration
-	for _, v := range ms {
+	count := len(ms) * 100_000
+	for j := 0; j < count; j++ {
+		v := ms[j%len(ms)]
 		id := uuid.New().String()
 		require.NoError(t, i.Insert(ctx, id, v))
 		n := time.Now()
@@ -94,5 +96,5 @@ func TestIndex(t *testing.T) {
 	require.NoError(t, err)
 	sort.Strings(indexes)
 	assert.Equal(t, matches, indexes)
-	assert.Len(t, indexes, 6)
+	assert.Len(t, indexes, 6*count/len(ms))
 }

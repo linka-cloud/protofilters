@@ -249,23 +249,24 @@ func (i *index) Find(ctx context.Context, t protoreflect.FullName, f filters.Fie
 }
 
 type keyReg struct {
-	keys []string
+	keys   []string
+	values map[string]uint64
 }
 
 func newKeyReg() *keyReg {
 	return &keyReg{
 		// size one to skip index 0
-		keys: make([]string, 1),
+		keys:   make([]string, 1),
+		values: make(map[string]uint64),
 	}
 }
 
 func (r *keyReg) index(k string) uint64 {
-	for i, v := range r.keys {
-		if v == k {
-			return uint64(i)
-		}
+	if v, ok := r.values[k]; ok {
+		return v
 	}
 	r.keys = append(r.keys, k)
+	r.values[k] = uint64(len(r.keys) - 1)
 	return uint64(len(r.keys) - 1)
 }
 
