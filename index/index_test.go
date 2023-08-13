@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.linka.cloud/protofilters"
 	"go.linka.cloud/protofilters/filters"
@@ -60,7 +61,19 @@ func TestIndex(t *testing.T) {
 			},
 		},
 		{
+			MessageField: &test.Test{
+				RepeatedMessageField: []*test.Test{
+					{
+						StringField: "whatever",
+					},
+				},
+			},
+		},
+		{
 			RepeatedStringField: []string{"one"},
+		},
+		{
+			TimeValueField: timestamppb.New(time.Now().Add(time.Hour)),
 		},
 		{},
 	}
@@ -69,16 +82,22 @@ func TestIndex(t *testing.T) {
 		And("number_field").NumberIN(42, 43).
 		Or(filters.Where("optional_bool_field").False()).
 		Or(filters.Where("message_field.string_field").StringEquals("whatever")).
-		Or(filters.Where("repeated_string_field").StringIN("one", "two"))
+		Or(filters.Where("repeated_string_field").StringIN("one", "two")).
+		Or(filters.Where("message_field.repeated_message_field.string_field").StringEquals("whatever")).
+		Or(filters.Where("time_value_field").TimeAfter(time.Now()))
 	i := New(nil, nil)
 	var matches []string
 	var d time.Duration
+	var di time.Duration
 	count := len(ms) * 100_000
+	t.Logf("Inserting %d records", count)
 	for j := 0; j < count; j++ {
 		v := ms[j%len(ms)]
 		id := uuid.New().String()
-		require.NoError(t, i.Insert(ctx, id, v))
 		n := time.Now()
+		require.NoError(t, i.Insert(ctx, id, v))
+		di += time.Since(n)
+		n = time.Now()
 		ok, err := protofilters.Match(v, f1)
 		d += time.Since(n)
 		require.NoError(t, err)
@@ -86,15 +105,16 @@ func TestIndex(t *testing.T) {
 			matches = append(matches, id)
 		}
 	}
+	t.Logf("Insert took %s", di)
 	t.Logf("Match took %s", d)
 	sort.Strings(matches)
-	d = 0
 	n := time.Now()
 	indexes, err := i.Find(ctx, ms[0].ProtoReflect().Descriptor().FullName(), f1)
-	d += time.Since(n)
-	t.Logf("Find took %s", d)
+	di = time.Since(n)
+	t.Logf("Find took %s", di)
+	t.Logf("Ratio: %.2fx", float64(d)/float64(di))
 	require.NoError(t, err)
 	sort.Strings(indexes)
 	assert.Equal(t, matches, indexes)
-	assert.Len(t, indexes, 6*count/len(ms))
+	assert.Len(t, indexes, 8*count/len(ms))
 }

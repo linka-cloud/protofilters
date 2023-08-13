@@ -73,8 +73,8 @@ func New(s Store, fn Func) Index {
 	}
 }
 
-func (i *index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds ...protoreflect.FieldDescriptor) error {
-	f := m.ProtoReflect().Descriptor().Fields()
+func (i *index) index(ctx context.Context, tx Tx, k string, m protoreflect.Message, fds ...protoreflect.FieldDescriptor) error {
+	f := m.Descriptor().Fields()
 	for j := 0; j < f.Len(); j++ {
 		fd := f.Get(j)
 		fds := append(fds, fd)
@@ -85,11 +85,16 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds
 		if !ok {
 			continue
 		}
-		rval := m.ProtoReflect().Get(fd)
+		rval := m.Get(fd)
 		if fd.IsList() {
 			// we don't index lists of messages
 			if fd.Kind() == protoreflect.MessageKind {
-				continue
+				for j2 := 0; j2 < rval.List().Len(); j2++ {
+					m := rval.List().Get(j2).Message()
+					if err := i.index(ctx, tx, k, m, fds...); err != nil {
+						return err
+					}
+				}
 			}
 			list := rval.List()
 			for j2 := 0; j2 < list.Len(); j2++ {
@@ -102,17 +107,16 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m proto.Message, fds
 		if fd.IsMap() {
 			continue
 		}
-		if fd.Kind() == protoreflect.MessageKind {
+		if fd.Kind() == protoreflect.MessageKind && !reflect.IsWKType(fd.Message().FullName()) {
 			if !rval.Message().IsValid() {
 				continue
 			}
-			m := rval.Message().Interface()
-			if err := i.index(ctx, tx, k, m.(proto.Message), fds...); err != nil {
+			if err := i.index(ctx, tx, k, rval.Message(), fds...); err != nil {
 				return err
 			}
 			continue
 		}
-		if fd.HasOptionalKeyword() && !m.ProtoReflect().Has(fd) {
+		if fd.HasOptionalKeyword() && !m.Has(fd) {
 			rval = protoreflect.Value{}
 		}
 		if err := tx.Add(ctx, k, rval, fds...); err != nil {
@@ -129,7 +133,7 @@ func (i *index) Insert(ctx context.Context, k string, m proto.Message) error {
 		return err
 	}
 	defer tx.Close()
-	if err := i.index(ctx, tx, k, m); err != nil {
+	if err := i.index(ctx, tx, k, m.ProtoReflect()); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -150,7 +154,7 @@ func (i *index) Update(ctx context.Context, k string, m proto.Message) error {
 			}
 		}
 	}
-	if err := i.index(ctx, tx, k, m); err != nil {
+	if err := i.index(ctx, tx, k, m.ProtoReflect()); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

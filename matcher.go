@@ -148,21 +148,28 @@ func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error
 	return true, nil
 }
 
-func (m *matcher) matchFilter(msg proto.Message, path string, filter *filters.Filter) (bool, error) {
-	fds, err := m.lookup(msg, path)
-	if err != nil {
-		return false, err
+func (m *matcher) doMatch(msg pref.Message, filter *filters.Filter, fds []pref.FieldDescriptor, iterating bool) (bool, error) {
+	if len(fds) == 0 {
+		return false, errors.New("field path is empty")
 	}
-	var (
-		fd   pref.FieldDescriptor
-		rval pref.Value
-	)
-	for i, v := range fds {
-		fd = v
-		if i > 0 {
-			rval = rval.Message().Get(fd)
-		} else {
-			rval = msg.ProtoReflect().Get(fd)
+	fd := fds[0]
+	fds = fds[1:]
+	rval := msg.Get(fd)
+	if len(fds) != 0 {
+		if fd.Kind() == pref.MessageKind && fd.IsList() && !iterating {
+			for j := 0; j < rval.List().Len(); j++ {
+				ok, err := m.doMatch(rval.List().Get(j).Message(), filter, fds, true)
+				if err != nil {
+					return false, err
+				}
+				if ok {
+					return true, nil
+				}
+			}
+			return false, nil
+		}
+		if fd.Kind() == pref.MessageKind {
+			return m.doMatch(rval.Message(), filter, fds, false)
 		}
 	}
 	if fd.IsList() {
@@ -184,7 +191,7 @@ func (m *matcher) matchFilter(msg proto.Message, path string, filter *filters.Fi
 	if fd.IsMap() {
 		return false, errors.New("matching against map is not supported")
 	}
-	if fd.HasOptionalKeyword() && !msg.ProtoReflect().Has(fd) {
+	if fd.HasOptionalKeyword() && !msg.Has(fd) {
 		rval = pref.Value{}
 	}
 	ok, err := reflect.Match(rval, fd, filter)
@@ -192,6 +199,14 @@ func (m *matcher) matchFilter(msg proto.Message, path string, filter *filters.Fi
 		return false, err
 	}
 	return ok, nil
+}
+
+func (m *matcher) matchFilter(msg proto.Message, path string, filter *filters.Filter) (bool, error) {
+	fds, err := m.lookup(msg, path)
+	if err != nil {
+		return false, err
+	}
+	return m.doMatch(msg.ProtoReflect(), filter, fds, false)
 }
 
 func (m *matcher) MatchFilters(msg proto.Message, fs ...*filters.FieldFilter) (bool, error) {
@@ -239,13 +254,12 @@ func (m *matcher) lookup(msg proto.Message, path string) ([]pref.FieldDescriptor
 			return nil, false // message does not have this field
 		}
 		// Identify the next message to search within.
-		md = fd.Message() // may be nil
+		// may be nil
+		md = fd.Message()
 
-		// Repeated fields are only allowed at the last position.
-		if fd.IsList() || fd.IsMap() {
+		if (fd.IsList() && fd.Kind() != pref.MessageKind) || fd.IsMap() {
 			md = nil
 		}
-
 		return fd, true
 	})
 	if !ok {

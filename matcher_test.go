@@ -373,6 +373,9 @@ func TestSubField(t *testing.T) {
 			NumberField:         43,
 			EnumField:           test.Test_TWO,
 			RepeatedStringField: []string{"three", "four"},
+			RepeatedMessageField: []*test.Test{{
+				StringField: "five",
+			}},
 		},
 	}
 	assert.False(MatchFilters(m, &filters.FieldFilter{
@@ -390,6 +393,14 @@ func TestSubField(t *testing.T) {
 	assert.True(MatchFilters(m, &filters.FieldFilter{
 		Field:  "message_field.number_field",
 		Filter: filters.NumberEquals(43),
+	}))
+	assert.True(MatchFilters(m, &filters.FieldFilter{
+		Field:  "message_field.repeated_message_field.string_field",
+		Filter: filters.StringEquals("five"),
+	}))
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "message_field.repeated_message_field.string_field",
+		Filter: filters.StringEquals("six"),
 	}))
 }
 

@@ -35,6 +35,29 @@ func (t WKType) String() string {
 	return string(t)
 }
 
+var WKTypes = []WKType{
+	Timestamp,
+	Duration,
+	DoubleValue,
+	FloatValue,
+	Int64Value,
+	UInt64Value,
+	Int32Value,
+	UInt32Value,
+	BoolValue,
+	StringValue,
+	BytesValue,
+}
+
+func IsWKType(t pref.FullName) bool {
+	for _, wt := range WKTypes {
+		if wt == WKType(t) {
+			return true
+		}
+	}
+	return false
+}
+
 const (
 	Timestamp   WKType = "google.protobuf.Timestamp"
 	Duration    WKType = "google.protobuf.Duration"
