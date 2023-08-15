@@ -19,7 +19,6 @@ package protofilters
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -233,64 +232,12 @@ func (m *matcher) lookup(msg proto.Message, path string) ([]pref.FieldDescriptor
 	if ok {
 		return fd, nil
 	}
-	md0 := msg.ProtoReflect().Descriptor()
-	md := md0
-	fds, ok := rangeFields(path, func(field string) (pref.FieldDescriptor, bool) {
-		// Search the field within the message.
-		if md == nil {
-			return nil, false // not within a message
-		}
-		fd := md.Fields().ByName(pref.Name(field))
-		// The real field name of a group is the message name.
-		if fd == nil {
-			gd := md.Fields().ByName(pref.Name(strings.ToLower(field)))
-			if gd != nil && gd.Kind() == pref.GroupKind && string(gd.Message().Name()) == field {
-				fd = gd
-			}
-		} else if fd.Kind() == pref.GroupKind && string(fd.Message().Name()) != field {
-			fd = nil
-		}
-		if fd == nil {
-			return nil, false // message does not have this field
-		}
-		// Identify the next message to search within.
-		// may be nil
-		md = fd.Message()
-
-		if (fd.IsList() && fd.Kind() != pref.MessageKind) || fd.IsMap() {
-			md = nil
-		}
-		return fd, true
-	})
-	if !ok {
-		return nil, fmt.Errorf("%s does not contain '%s'", md0.FullName(), path)
+	fds, err := reflect.Lookup(msg.ProtoReflect(), path)
+	if err != nil {
+		return nil, err
 	}
 	m.mu.Lock()
 	m.cache[key] = fds
 	m.mu.Unlock()
 	return fds, nil
-}
-
-// rangeFields is like strings.Split(path, "."), but avoids allocations by
-// iterating over each field in place and calling a iterator function.
-// (taken from "google.golang.org/protobuf/types/known/fieldmaskpb")
-func rangeFields(path string, f func(field string) (pref.FieldDescriptor, bool)) ([]pref.FieldDescriptor, bool) {
-	var fds []pref.FieldDescriptor
-	for {
-		var field string
-		if i := strings.IndexByte(path, '.'); i >= 0 {
-			field, path = path[:i], path[i:]
-		} else {
-			field, path = path, ""
-		}
-		v, ok := f(field)
-		if !ok {
-			return nil, false
-		}
-		fds = append(fds, v)
-		if len(path) == 0 {
-			return fds, true
-		}
-		path = strings.TrimPrefix(path, ".")
-	}
 }
