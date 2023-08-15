@@ -31,14 +31,14 @@ func main() {
 		BoolField:      true,
 		BoolValueField: wrapperspb.Bool(false),
 	}
-	ok, err := protofilters.MatchFilters(m, &filters.FieldFilter{Field: "bool_field", Filter: filters.True()})
+	ok, err := protofilters.Match(m, filters.Where("bool_field").True())
 	if err != nil {
 		log.Fatalln(err)
 	}
 	if !ok {
 		log.Fatalln("should be true")
 	}
-	ok, err = protofilters.MatchFilters(m, &filters.FieldFilter{Field: "bool_value_field", Filter: filters.False()})
+	ok, err = protofilters.Match(m, filters.Where("bool_value_field").False())
 	if err != nil {
 		log.Fatalln(err)
 	}
