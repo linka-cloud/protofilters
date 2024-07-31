@@ -21,5 +21,6 @@ package protofilters
 
 import (
 	_ "github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto"
+	_ "golang.org/x/tools/cmd/goimports"
 	_ "google.golang.org/protobuf/cmd/protoc-gen-go"
 )

@@ -58,6 +58,8 @@ type Builder interface {
 	TimeNotEquals(t time.Time) Builder
 	TimeAfter(t time.Time) Builder
 	TimeBefore(t time.Time) Builder
+
+	Clone() Builder
 }
 
 func Where(field string) Builder {
@@ -300,4 +302,14 @@ func (b *builder) TimeAfter(t time.Time) Builder {
 func (b *builder) TimeBefore(t time.Time) Builder {
 	b.c.Condition.Filter = TimeBefore(t)
 	return b
+}
+
+func (b *builder) Clone() Builder {
+	if b == nil {
+		return nil
+	}
+	return &builder{
+		r: b.r.CloneVT(),
+		c: b.c.CloneVT(),
+	}
 }

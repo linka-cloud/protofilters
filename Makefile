@@ -28,6 +28,7 @@ INCLUDE_PROTO_PATH = -I$(PROTO_BASE_PATH) \
 bin:
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go
 	@go install github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto
+	@go install golang.org/x/tools/cmd/goimports
 
 clean:
 	@rm -rf .bin
@@ -41,7 +42,7 @@ proto: gen-proto lint
 gen-proto: bin
 	@find $(PROTO_BASE_PATH) -name '*.proto' -type f -exec \
     	protoc $(INCLUDE_PROTO_PATH) \
-    		--go-vtproto_out=features=marshal+unmarshal+size,paths=source_relative:. \
+    		--go-vtproto_out=features=marshal+unmarshal+size+clone,paths=source_relative:. \
     		--go_out=paths=source_relative:. {} \;
 
 .PHONY: lint
