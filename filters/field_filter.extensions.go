@@ -63,7 +63,7 @@ func (x *StringFilter) Match(v *string) (bool, error) {
 	switch x.GetCondition().(type) {
 	case *StringFilter_Equals:
 		if insensitive {
-			return strings.ToLower(x.GetEquals()) == strings.ToLower(value), nil
+			return strings.EqualFold(x.GetEquals(), value), nil
 		}
 		return value == x.GetEquals(), nil
 	case *StringFilter_HasPrefix:
@@ -84,10 +84,20 @@ func (x *StringFilter) Match(v *string) (bool, error) {
 		return reg.MatchString(value), nil
 	case *StringFilter_In_:
 		for _, v := range x.GetIn().GetValues() {
-			if (insensitive && strings.ToLower(v) == strings.ToLower(value)) || v == value {
+			if (insensitive && strings.EqualFold(v, value)) || v == value {
 				return true, nil
 			}
 		}
+	case *StringFilter_Inf:
+		if insensitive {
+			return strings.ToLower(value) < strings.ToLower(x.GetInf()), nil
+		}
+		return value < x.GetInf(), nil
+	case *StringFilter_Sup:
+		if insensitive {
+			return strings.ToLower(value) > strings.ToLower(x.GetSup()), nil
+		}
+		return value > x.GetSup(), nil
 	}
 	return false, nil
 }

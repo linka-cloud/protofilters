@@ -71,6 +71,8 @@ message StringFilter {
     string has_prefix = 5;
     string has_suffix = 6;
     In in = 3;
+    string sup = 7;
+    string inf = 8;
   }
   bool case_insensitive = 4;
 }

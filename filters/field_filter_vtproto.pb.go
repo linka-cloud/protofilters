@@ -260,6 +260,24 @@ func (m *StringFilter_In_) CloneVT() isStringFilter_Condition {
 	return r
 }
 
+func (m *StringFilter_Sup) CloneVT() isStringFilter_Condition {
+	if m == nil {
+		return (*StringFilter_Sup)(nil)
+	}
+	r := new(StringFilter_Sup)
+	r.Sup = m.Sup
+	return r
+}
+
+func (m *StringFilter_Inf) CloneVT() isStringFilter_Condition {
+	if m == nil {
+		return (*StringFilter_Inf)(nil)
+	}
+	r := new(StringFilter_Inf)
+	r.Inf = m.Inf
+	return r
+}
+
 func (m *NumberFilter_In) CloneVT() *NumberFilter_In {
 	if m == nil {
 		return (*NumberFilter_In)(nil)
@@ -972,6 +990,34 @@ func (m *StringFilter_HasSuffix) MarshalToSizedBufferVT(dAtA []byte) (int, error
 	dAtA[i] = 0x32
 	return len(dAtA) - i, nil
 }
+func (m *StringFilter_Sup) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *StringFilter_Sup) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i -= len(m.Sup)
+	copy(dAtA[i:], m.Sup)
+	i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Sup)))
+	i--
+	dAtA[i] = 0x3a
+	return len(dAtA) - i, nil
+}
+func (m *StringFilter_Inf) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *StringFilter_Inf) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i -= len(m.Inf)
+	copy(dAtA[i:], m.Inf)
+	i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Inf)))
+	i--
+	dAtA[i] = 0x42
+	return len(dAtA) - i, nil
+}
 func (m *NumberFilter_In) MarshalVT() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -1625,6 +1671,26 @@ func (m *StringFilter_HasSuffix) SizeVT() (n int) {
 	var l int
 	_ = l
 	l = len(m.HasSuffix)
+	n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	return n
+}
+func (m *StringFilter_Sup) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Sup)
+	n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	return n
+}
+func (m *StringFilter_Inf) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Inf)
 	n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	return n
 }
@@ -2885,6 +2951,70 @@ func (m *StringFilter) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Condition = &StringFilter_HasSuffix{HasSuffix: string(dAtA[iNdEx:postIndex])}
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sup", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Condition = &StringFilter_Sup{Sup: string(dAtA[iNdEx:postIndex])}
+			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Inf", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Condition = &StringFilter_Inf{Inf: string(dAtA[iNdEx:postIndex])}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

@@ -220,6 +220,24 @@ func StringNotIN(s ...string) *Filter {
 		true)
 }
 
+func StringInf(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_Inf{
+				Inf: s,
+			},
+		})
+}
+
+func StringSup(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_Sup{
+				Sup: s,
+			},
+		})
+}
+
 func newNumberFilter(f *NumberFilter, not ...bool) *Filter {
 	return &Filter{
 		Match: &Filter_Number{

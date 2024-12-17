@@ -230,6 +230,8 @@ func TestString(t *testing.T) {
 	assert.False(Match(m, filters.Where("string_value_field").StringHasPrefix("noop")))
 	assert.True(Match(m, filters.Where("string_value_field").StringHasSuffix("ever")))
 	assert.False(Match(m, filters.Where("string_value_field").StringHasSuffix("noop")))
+	assert.True(Match(m, filters.Where("string_value_field").StringInf("whenever")))
+	assert.False(Match(m, filters.Where("string_value_field").StringSup("whenever")))
 }
 
 func TestEnum(t *testing.T) {

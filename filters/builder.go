@@ -39,6 +39,8 @@ type Builder interface {
 	StringRegex(s string) Builder
 	StringNotRegex(s string) Builder
 	StringIN(s ...string) Builder
+	StringInf(s string) Builder
+	StringSup(s string) Builder
 	StringNotIN(s ...string) Builder
 	NumberEquals(n float64) Builder
 	NumberNotEquals(n float64) Builder
@@ -193,6 +195,18 @@ func (b *builder) StringIN(s ...string) Builder {
 // StringNotIN constructs a string not in slice filter
 func (b *builder) StringNotIN(s ...string) Builder {
 	b.c.Condition.Filter = StringNotIN(s...)
+	return b
+}
+
+// StringInf constructs a string inferior filter
+func (b *builder) StringInf(s string) Builder {
+	b.c.Condition.Filter = StringInf(s)
+	return b
+}
+
+// StringSup constructs a string superior filter
+func (b *builder) StringSup(s string) Builder {
+	b.c.Condition.Filter = StringSup(s)
 	return b
 }
 
