@@ -18,6 +18,7 @@ package index
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.linka.cloud/protofilters"
@@ -85,8 +87,31 @@ func TestIndex(t *testing.T) {
 		Or(filters.Where("repeated_string_field").StringIN("one", "two")).
 		Or(filters.Where("message_field.repeated_message_field.string_field").StringEquals("whatever")).
 		Or(filters.Where("time_value_field").TimeAfter(time.Now()))
-	i := New(nil, nil)
+
+	i := New(nil, func(ctx context.Context, name protoreflect.FullName, fds ...protoreflect.FieldDescriptor) (bool, error) {
+		if name != "linka.cloud.test.Test" {
+			return false, nil
+		}
+		var f protoreflect.FullName
+		for _, v := range fds {
+			f = f.Append(v.Name())
+		}
+		switch f {
+		case "string_field",
+			"bool_field",
+			"number_field",
+			"optional_bool_field",
+			"message_field.string_field",
+			"repeated_string_field",
+			"message_field.repeated_message_field.string_field",
+			"time_value_field":
+			return true, nil
+		default:
+			return false, nil
+		}
+	})
 	var matches []string
+	msgs := make(map[string]*test.Test)
 	var d time.Duration
 	var di time.Duration
 	count := len(ms) * 100_000
@@ -94,6 +119,7 @@ func TestIndex(t *testing.T) {
 	for j := 0; j < count; j++ {
 		v := ms[j%len(ms)]
 		id := uuid.New().String()
+		msgs[id] = v
 		n := time.Now()
 		require.NoError(t, i.Insert(ctx, id, v))
 		di += time.Since(n)
@@ -109,12 +135,28 @@ func TestIndex(t *testing.T) {
 	t.Logf("Match took %s", d)
 	sort.Strings(matches)
 	n := time.Now()
-	indexes, err := i.Find(ctx, ms[0].ProtoReflect().Descriptor().FullName(), f1)
+	keys, collisions, err := i.Find(ctx, ms[0].ProtoReflect().Descriptor().FullName(), f1)
+	t.Logf("Found %d collisions", len(collisions))
+	for _, v := range collisions {
+		ok, err := protofilters.Match(msgs[v], f1)
+		require.NoError(t, err)
+		if ok {
+			keys = append(keys, v)
+		}
+	}
 	di = time.Since(n)
 	t.Logf("Find took %s", di)
 	t.Logf("Ratio: %.2fx", float64(d)/float64(di))
 	require.NoError(t, err)
-	sort.Strings(indexes)
-	assert.Equal(t, matches, indexes)
-	assert.Len(t, indexes, 8*count/len(ms))
+	sort.Strings(keys)
+	assert.Equal(t, matches, keys)
+	assert.Len(t, keys, 8*count/len(ms))
+	if !slices.Equal(keys, matches) {
+		s := slices.DeleteFunc(keys, func(s string) bool {
+			return !assert.Contains(t, matches, s)
+		})
+		for _, v := range s {
+			t.Logf("Missing: %s", msgs[v])
+		}
+	}
 }

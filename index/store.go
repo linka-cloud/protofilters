@@ -19,7 +19,9 @@ package index
 import (
 	"context"
 	"strings"
+	"sync"
 
+	"github.com/cespare/xxhash/v2"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -48,6 +50,9 @@ type Store interface {
 	Add(ctx context.Context, k string, v protoreflect.Value, fds ...protoreflect.FieldDescriptor) error
 	// Remove removes a value from the store for the given key and field descriptor.
 	Remove(ctx context.Context, k string, f protoreflect.FieldDescriptor, v protoreflect.Value) error
+	// Keys returns the values for the given uint64 hash.
+	// It may return multiple values in case of hash collisions.
+	Keys(ctx context.Context, i uint64) ([]string, error)
 	// Clear removes all values from the store for the given key.
 	Clear(ctx context.Context, k string) error
 }
@@ -85,11 +90,35 @@ func (f *fieldReader) Get(_ context.Context, n protoreflect.Name) (Iterator[Fiel
 	return &sliceIterator[Field]{slice: fields}, ok, nil
 }
 
-type store map[protoreflect.FullName][]*field
+func newStore() Store {
+	return &store{
+		fields:   make(map[protoreflect.FullName][]*field),
+		hashKeys: make(map[uint64][]string),
+		keyHash:  make(map[string]uint64),
+	}
+}
 
-func (s store) For(_ context.Context, t protoreflect.FullName) (FieldReader, error) {
+type store struct {
+	fields   map[protoreflect.FullName][]*field
+	hashKeys map[uint64][]string
+	keyHash  map[string]uint64
+	m        sync.RWMutex
+}
+
+func (s *store) Keys(_ context.Context, i uint64) ([]string, error) {
+	s.m.RLock()
+	defer s.m.RUnlock()
+	k := s.hashKeys[i]
+	o := make([]string, len(k))
+	copy(o, k)
+	return o, nil
+}
+
+func (s *store) For(_ context.Context, t protoreflect.FullName) (FieldReader, error) {
+	s.m.RLock()
+	defer s.m.RUnlock()
 	out := make(map[protoreflect.Name][]*field)
-	for k, v := range s {
+	for k, v := range s.fields {
 		if strings.HasPrefix(string(k), string(t)) {
 			// +1 for the dot
 			out[protoreflect.Name(k[len(t)+1:])] = v
@@ -98,7 +127,9 @@ func (s store) For(_ context.Context, t protoreflect.FullName) (FieldReader, err
 	return &fieldReader{m: out}, nil
 }
 
-func (s store) Add(_ context.Context, k string, v protoreflect.Value, fds ...protoreflect.FieldDescriptor) error {
+func (s *store) Add(_ context.Context, k string, v protoreflect.Value, fds ...protoreflect.FieldDescriptor) error {
+	s.m.Lock()
+	defer s.m.Unlock()
 	if len(fds) == 0 {
 		return nil
 	}
@@ -106,28 +137,41 @@ func (s store) Add(_ context.Context, k string, v protoreflect.Value, fds ...pro
 	for _, v := range fds[1:] {
 		n = n.Append(v.Name())
 	}
-	if _, ok := s[n]; !ok {
-		s[n] = make([]*field, 0)
+	if _, ok := s.fields[n]; !ok {
+		s.fields[n] = make([]*field, 0)
 	}
-	for _, fi := range s[n] {
+	for _, fi := range s.fields[n] {
 		if fi.value.Interface() == v.Interface() {
-			fi.add(k)
+			i := fi.add(k)
+			s.addIndex(k, i)
 			return nil
 		}
 	}
-	s[n] = append(s[n], &field{
-		value:       v,
-		keys:        []string{k},
-		descriptors: fds,
-	})
+	fi := newField(v, fds)
+	i := fi.add(k)
+	s.addIndex(k, i)
+	s.fields[n] = append(s.fields[n], fi)
 	return nil
 }
 
-func (s store) Remove(_ context.Context, k string, f protoreflect.FieldDescriptor, v protoreflect.Value) error {
-	if _, ok := s[f.FullName()]; !ok {
+func (s *store) addIndex(k string, i uint64) {
+	if _, ok := s.keyHash[k]; ok {
+		return
+	}
+	s.hashKeys[i] = append(s.hashKeys[i], k)
+	s.keyHash[k] = i
+}
+
+func (s *store) Remove(_ context.Context, k string, f protoreflect.FieldDescriptor, v protoreflect.Value) error {
+	s.m.Lock()
+	defer s.m.Unlock()
+	if _, ok := s.fields[f.FullName()]; !ok {
 		return nil
 	}
-	for _, fi := range s[f.FullName()] {
+	if _, ok := s.keyHash[k]; !ok {
+		return nil
+	}
+	for _, fi := range s.fields[f.FullName()] {
 		if fi.value.Interface() == v.Interface() {
 			fi.remove(k)
 			return nil
@@ -136,8 +180,13 @@ func (s store) Remove(_ context.Context, k string, f protoreflect.FieldDescripto
 	return nil
 }
 
-func (s store) Clear(_ context.Context, k string) error {
-	for _, fis := range s {
+func (s *store) Clear(_ context.Context, k string) error {
+	s.m.Lock()
+	defer s.m.Unlock()
+	i := xxhash.Sum64String(k)
+	delete(s.hashKeys, i)
+	delete(s.keyHash, k)
+	for _, fis := range s.fields {
 		for _, fi := range fis {
 			fi.remove(k)
 		}

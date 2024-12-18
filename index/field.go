@@ -19,6 +19,7 @@ package index
 import (
 	"context"
 
+	"github.com/cespare/xxhash/v2"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -26,8 +27,8 @@ import (
 type Field interface {
 	// Value returns the value of the field
 	Value() protoreflect.Value
-	// Keys returns an iterator over the keys of the messages that have this value for this field
-	Keys(ctx context.Context) (Iterator[string], error)
+	// Bitmap returns a Bitmap of the keys that have this value
+	Bitmap(ctx context.Context) (*Bitmap, error)
 	// Descriptors returns the field descriptors for this field
 	Descriptors() []protoreflect.FieldDescriptor
 }
@@ -38,9 +39,17 @@ type FieldReader interface {
 	Get(ctx context.Context, f protoreflect.Name) (Iterator[Field], bool, error)
 }
 
+func newField(v protoreflect.Value, fds []protoreflect.FieldDescriptor) *field {
+	return &field{
+		value:       v,
+		bitmap:      NewBitmapWith(1024),
+		descriptors: fds,
+	}
+}
+
 type field struct {
 	value       protoreflect.Value
-	keys        []string
+	bitmap      *Bitmap
 	descriptors []protoreflect.FieldDescriptor
 }
 
@@ -48,23 +57,21 @@ func (f *field) Value() protoreflect.Value {
 	return f.value
 }
 
-func (f *field) Keys(_ context.Context) (Iterator[string], error) {
-	return &sliceIterator[string]{slice: f.keys}, nil
+func (f *field) Bitmap(_ context.Context) (*Bitmap, error) {
+	return f.bitmap, nil
 }
 
 func (f *field) Descriptors() []protoreflect.FieldDescriptor {
 	return f.descriptors
 }
 
-func (f *field) add(k string) {
-	f.keys = append(f.keys, k)
+func (f *field) add(k string) uint64 {
+	h := xxhash.Sum64String(k)
+	f.bitmap.Set(h)
+	return h
 }
 
 func (f *field) remove(k string) {
-	for i, v := range f.keys {
-		if k == v {
-			f.keys = append(f.keys[:i], f.keys[i+1:]...)
-			return
-		}
-	}
+	h := xxhash.Sum64String(k)
+	f.bitmap.Remove(h)
 }

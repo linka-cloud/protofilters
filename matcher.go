@@ -18,7 +18,6 @@ package protofilters
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -225,7 +224,7 @@ func (m *matcher) lookup(msg proto.Message, path string) ([]pref.FieldDescriptor
 		m.cache = make(map[string][]pref.FieldDescriptor)
 		m.mu.Unlock()
 	}
-	key := fmt.Sprintf("%s.%s", msg.ProtoReflect().Descriptor().FullName(), path)
+	key := string(msg.ProtoReflect().Descriptor().FullName()) + "." + path
 	m.mu.RLock()
 	fd, ok := m.cache[key]
 	m.mu.RUnlock()

@@ -19,7 +19,6 @@ package index
 import (
 	"context"
 
-	"github.com/dgraph-io/sroar"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
@@ -27,14 +26,14 @@ import (
 	"go.linka.cloud/protofilters/reflect"
 )
 
-func All(_ context.Context, _ ...protoreflect.FieldDescriptor) (bool, error) {
+func All(_ context.Context, _ protoreflect.FullName, _ ...protoreflect.FieldDescriptor) (bool, error) {
 	return true, nil
 }
 
 // Func is a function that is called to determine if a field should be indexed
 // It takes a context and a list of field descriptors that represent the path to the field
 // It returns a bool indicating if the field should be indexed or not and an error if any
-type Func func(ctx context.Context, fds ...protoreflect.FieldDescriptor) (bool, error)
+type Func func(ctx context.Context, name protoreflect.FullName, fds ...protoreflect.FieldDescriptor) (bool, error)
 
 // Index is a protobuf message index
 type Index interface {
@@ -45,7 +44,9 @@ type Index interface {
 	// Remove removes the given key from the index
 	Remove(ctx context.Context, k string) error
 	// Find returns the keys of the messages that match the given FieldFilterer
-	Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, error)
+	// It returns the keys that match the filter and the keys that have hash collisions
+	// They need to be resolved by checking the actual values
+	Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, []string, error)
 }
 
 type index struct {
@@ -61,7 +62,7 @@ func New(s Store, fn Func) Index {
 		fn = All
 	}
 	if s == nil {
-		s = make(store)
+		s = newStore()
 	}
 	x, ok := any(s).(Txer)
 	if !ok {
@@ -75,15 +76,16 @@ func New(s Store, fn Func) Index {
 
 func (i *index) index(ctx context.Context, tx Tx, k string, m protoreflect.Message, fds ...protoreflect.FieldDescriptor) error {
 	f := m.Descriptor().Fields()
+	name := m.Descriptor().FullName()
+	if len(fds) > 0 {
+		_ = fds
+	}
 	for j := 0; j < f.Len(); j++ {
 		fd := f.Get(j)
 		fds := append(fds, fd)
-		ok, err := i.fn(ctx, fds...)
+		ok, err := i.fn(ctx, name, fds...)
 		if err != nil {
 			return err
-		}
-		if !ok {
-			continue
 		}
 		rval := m.Get(fd)
 		if fd.IsList() {
@@ -118,6 +120,9 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m protoreflect.Messa
 		}
 		if fd.HasOptionalKeyword() && !m.Has(fd) {
 			rval = protoreflect.Value{}
+		}
+		if !ok {
+			continue
 		}
 		if err := tx.Add(ctx, k, rval, fds...); err != nil {
 			return err
@@ -172,7 +177,7 @@ func (i *index) Remove(ctx context.Context, k string) error {
 	return tx.Commit(ctx)
 }
 
-func (i *index) doFind(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullName, f *filters.FieldFilter) (*sroar.Bitmap, error) {
+func (i *index) doFind(ctx context.Context, tx Tx, t protoreflect.FullName, f *filters.FieldFilter) (*Bitmap, error) {
 	fds, err := tx.For(ctx, t)
 	if err != nil {
 		return nil, err
@@ -182,10 +187,10 @@ func (i *index) doFind(ctx context.Context, tx Tx, r *keyReg, t protoreflect.Ful
 	if err != nil {
 		return nil, err
 	}
+	b := NewBitmapWith(1024)
 	if !ok {
-		return nil, nil
+		return b, nil
 	}
-	b := sroar.NewBitmap()
 	for fit.Next() {
 		v, err := fit.Value()
 		if err != nil {
@@ -200,36 +205,7 @@ func (i *index) doFind(ctx context.Context, tx Tx, r *keyReg, t protoreflect.Ful
 		if !ok {
 			continue
 		}
-		it, err := v.Keys(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for it.Next() {
-			v, err := it.Value()
-			if err != nil {
-				return nil, err
-			}
-			b.Set(r.index(v))
-		}
-	}
-	return b, nil
-}
-
-func (i *index) find(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullName, f filters.FieldFilterer) (*sroar.Bitmap, error) {
-	expr := f.Expr()
-	b, err := i.doFind(ctx, tx, r, t, expr.Condition)
-	if err != nil {
-		return nil, err
-	}
-	for _, v := range expr.AndExprs {
-		b2, err := i.find(ctx, tx, r, t, v)
-		if err != nil {
-			return nil, err
-		}
-		b.And(b2)
-	}
-	for _, v := range expr.OrExprs {
-		b2, err := i.find(ctx, tx, r, t, v)
+		b2, err := v.Bitmap(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -238,53 +214,59 @@ func (i *index) find(ctx context.Context, tx Tx, r *keyReg, t protoreflect.FullN
 	return b, nil
 }
 
-func (i *index) Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, error) {
+func (i *index) find(ctx context.Context, tx Tx, t protoreflect.FullName, f filters.FieldFilterer) (*Bitmap, error) {
+	expr := f.Expr()
+	b, err := i.doFind(ctx, tx, t, expr.Condition)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range expr.AndExprs {
+		b2, err := i.find(ctx, tx, t, v)
+		if err != nil {
+			return nil, err
+		}
+		b.And(b2)
+	}
+	for _, v := range expr.OrExprs {
+		b2, err := i.find(ctx, tx, t, v)
+		if err != nil {
+			return nil, err
+		}
+		b.Or(b2)
+	}
+	return b, nil
+}
+
+func (i *index) Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, []string, error) {
 	if f == nil || f.Expr() == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	tx, err := i.store.Tx(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer tx.Close()
-	r := newKeyReg()
-	b, err := i.find(ctx, tx, r, t, f)
+	b, err := i.find(ctx, tx, t, f)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return r.keysFor(b.ToArray()), nil
-}
-
-type keyReg struct {
-	keys   []string
-	values map[string]uint64
-}
-
-func newKeyReg() *keyReg {
-	return &keyReg{
-		// size one to skip index 0
-		keys:   make([]string, 1),
-		values: make(map[string]uint64),
+	it := b.NewIterator()
+	var keys []string
+	var collisions []string
+	for {
+		v := it.Next()
+		if v == 0 {
+			break
+		}
+		ks, err := tx.Keys(ctx, v)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(ks) != 1 {
+			collisions = append(collisions, ks...)
+			continue
+		}
+		keys = append(keys, ks...)
 	}
-}
-
-func (r *keyReg) index(k string) uint64 {
-	if v, ok := r.values[k]; ok {
-		return v
-	}
-	r.keys = append(r.keys, k)
-	r.values[k] = uint64(len(r.keys) - 1)
-	return uint64(len(r.keys) - 1)
-}
-
-func (r *keyReg) key(i uint64) string {
-	return r.keys[i]
-}
-
-func (r *keyReg) keysFor(i []uint64) []string {
-	out := make([]string, len(i))
-	for j, v := range i {
-		out[j] = r.key(v)
-	}
-	return out
+	return keys, collisions, nil
 }
