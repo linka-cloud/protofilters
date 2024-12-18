@@ -179,6 +179,9 @@ func (i *index) doFind(ctx context.Context, tx Tx, r *keyReg, t protoreflect.Ful
 	}
 
 	fit, ok, err := fds.Get(ctx, protoreflect.Name(f.Field))
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, nil
 	}
