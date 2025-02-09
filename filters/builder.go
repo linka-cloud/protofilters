@@ -41,6 +41,8 @@ type Builder interface {
 	StringIN(s ...string) Builder
 	StringInf(s string) Builder
 	StringSup(s string) Builder
+	StringIInf(s string) Builder
+	StringISup(s string) Builder
 	StringNotIN(s ...string) Builder
 	NumberEquals(n float64) Builder
 	NumberNotEquals(n float64) Builder
@@ -207,6 +209,18 @@ func (b *builder) StringInf(s string) Builder {
 // StringSup constructs a string superior filter
 func (b *builder) StringSup(s string) Builder {
 	b.c.Condition.Filter = StringSup(s)
+	return b
+}
+
+// StringIInf constructs a case insensitive string inferior filter
+func (b *builder) StringIInf(s string) Builder {
+	b.c.Condition.Filter = StringIInf(s)
+	return b
+}
+
+// StringISup constructs a case insensitive string superior filter
+func (b *builder) StringISup(s string) Builder {
+	b.c.Condition.Filter = StringISup(s)
 	return b
 }
 

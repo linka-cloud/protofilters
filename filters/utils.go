@@ -238,6 +238,26 @@ func StringSup(s string) *Filter {
 		})
 }
 
+func StringIInf(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_Inf{
+				Inf: s,
+			},
+			CaseInsensitive: true,
+		})
+}
+
+func StringISup(s string) *Filter {
+	return newStringFilter(
+		&StringFilter{
+			Condition: &StringFilter_Sup{
+				Sup: s,
+			},
+			CaseInsensitive: true,
+		})
+}
+
 func newNumberFilter(f *NumberFilter, not ...bool) *Filter {
 	return &Filter{
 		Match: &Filter_Number{
