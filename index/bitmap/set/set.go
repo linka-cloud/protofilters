@@ -1,5 +1,3 @@
-//go:build set
-
 /*
  Copyright 2021 Linka Cloud  All rights reserved.
 
@@ -16,34 +14,37 @@
  limitations under the License.
 */
 
-package index
+package set
 
 import (
 	"encoding/binary"
 	"iter"
 
 	"github.com/tidwall/btree"
+
+	bitmap2 "go.linka.cloud/protofilters/index/bitmap"
 )
 
-var _ Bitmap = (*bitmap)(nil)
+var (
+	_ bitmap2.Provider = (*prov)(nil)
+	_ bitmap2.Bitmap   = (*bitmap)(nil)
+)
 
-type bitmap struct {
-	s *btree.Set[uint64]
-}
+type prov struct{}
 
-func NewBitmap() Bitmap {
+func (prov) New() bitmap2.Bitmap {
 	return &bitmap{
 		s: &btree.Set[uint64]{},
 	}
 }
 
-func NewBitmapWith(_ int) Bitmap {
+func (prov) NewWith(_ int) bitmap2.Bitmap {
 	return &bitmap{
 		s: &btree.Set[uint64]{},
 	}
 }
 
-func NewBitmapFrom(buf []byte) Bitmap {
+func (prov) NewFrom(buf []byte) bitmap2.Bitmap {
 	s := &btree.Set[uint64]{}
 	for i := 0; i < len(buf); i += 8 {
 		s.Insert(binary.LittleEndian.Uint64(buf[i:]))
@@ -51,6 +52,10 @@ func NewBitmapFrom(buf []byte) Bitmap {
 	return &bitmap{
 		s: s,
 	}
+}
+
+type bitmap struct {
+	s *btree.Set[uint64]
 }
 
 func (b *bitmap) Set(k uint64) {
@@ -61,7 +66,7 @@ func (b *bitmap) Remove(k uint64) {
 	b.s.Delete(k)
 }
 
-func (b *bitmap) And(other Bitmap) {
+func (b *bitmap) And(other bitmap2.Bitmap) {
 	o := other.(*bitmap)
 	it := b.s.Iter()
 	for it.Next() {
@@ -71,7 +76,7 @@ func (b *bitmap) And(other Bitmap) {
 	}
 }
 
-func (b *bitmap) Or(other Bitmap) {
+func (b *bitmap) Or(other bitmap2.Bitmap) {
 	o := other.(*bitmap)
 	for it := o.s.Iter(); it.Next(); {
 		b.s.Insert(it.Key())
@@ -88,10 +93,6 @@ func (b *bitmap) Bytes() []byte {
 	return buf
 }
 
-type bitmapIterator struct {
-	it btree.SetIter[uint64]
-}
-
 func (b *bitmap) Iter() iter.Seq[uint64] {
 	return func(yield func(uint64) bool) {
 		it := b.s.Iter()
@@ -101,4 +102,8 @@ func (b *bitmap) Iter() iter.Seq[uint64] {
 			}
 		}
 	}
+}
+
+func init() {
+	bitmap2.SetProvider(prov{})
 }

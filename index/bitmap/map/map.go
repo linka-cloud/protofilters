@@ -1,5 +1,3 @@
-//go:build !set
-
 /*
  Copyright 2021 Linka Cloud  All rights reserved.
 
@@ -16,37 +14,44 @@
  limitations under the License.
 */
 
-package index
+package simplemap
 
 import (
 	"encoding/binary"
 	"iter"
+
+	bitmap2 "go.linka.cloud/protofilters/index/bitmap"
 )
 
-var _ Bitmap = (*bitmap)(nil)
+var (
+	_ bitmap2.Provider = (*prov)(nil)
+	_ bitmap2.Bitmap   = (*bitmap)(nil)
+)
 
-type bitmap struct {
-	m map[uint64]struct{}
-}
+type prov struct{}
 
-func NewBitmap() Bitmap {
+func (prov) New() bitmap2.Bitmap {
 	return &bitmap{
 		m: make(map[uint64]struct{}),
 	}
 }
 
-func NewBitmapWith(size int) Bitmap {
+func (prov) NewWith(size int) bitmap2.Bitmap {
 	return &bitmap{
 		m: make(map[uint64]struct{}, size),
 	}
 }
 
-func NewBitmapFrom(buf []byte) Bitmap {
+func (prov) NewFrom(buf []byte) bitmap2.Bitmap {
 	m := make(map[uint64]struct{}, len(buf)/8)
 	for i := 0; i < len(buf); i += 8 {
 		m[binary.LittleEndian.Uint64(buf[i:])] = struct{}{}
 	}
 	return &bitmap{m: m}
+}
+
+type bitmap struct {
+	m map[uint64]struct{}
 }
 
 func (b *bitmap) Set(k uint64) {
@@ -57,7 +62,7 @@ func (b *bitmap) Remove(k uint64) {
 	delete(b.m, k)
 }
 
-func (b *bitmap) And(other Bitmap) {
+func (b *bitmap) And(other bitmap2.Bitmap) {
 	o := other.(*bitmap)
 	for k := range b.m {
 		if _, exists := o.m[k]; !exists {
@@ -66,7 +71,7 @@ func (b *bitmap) And(other Bitmap) {
 	}
 }
 
-func (b *bitmap) Or(other Bitmap) {
+func (b *bitmap) Or(other bitmap2.Bitmap) {
 	o := other.(*bitmap)
 	for k := range o.m {
 		b.m[k] = struct{}{}
@@ -95,4 +100,8 @@ func (b *bitmap) Iter() iter.Seq[uint64] {
 			}
 		}
 	}
+}
+
+func init() {
+	bitmap2.SetProvider(prov{})
 }

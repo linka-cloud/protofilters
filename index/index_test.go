@@ -20,10 +20,10 @@ import (
 	"context"
 	"slices"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -118,7 +118,8 @@ func TestIndex(t *testing.T) {
 	t.Logf("Inserting %d records", count)
 	for j := range count {
 		v := ms[j%len(ms)]
-		id := uuid.New().String()
+		// id := uuid.New().String()
+		id := strconv.Itoa(j + 1) // use simple integer ids for performance
 		msgs[id] = v
 		n := time.Now()
 		require.NoError(t, i.Insert(ctx, id, v))
@@ -129,6 +130,9 @@ func TestIndex(t *testing.T) {
 		require.NoError(t, err)
 		if ok {
 			matches = append(matches, id)
+		}
+		if (j+1)%100_000 == 0 {
+			t.Logf("Inserted %d records", j+1)
 		}
 	}
 	t.Logf("Insert took %s", di)

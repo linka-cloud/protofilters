@@ -14,11 +14,40 @@
  limitations under the License.
 */
 
-package index
+package bitmap
 
 import (
 	"iter"
 )
+
+var p Provider
+
+func New() Bitmap {
+	if p == nil {
+		panic("no bitmap implementation imported")
+	}
+	return p.New()
+}
+
+func NewWith(n int) Bitmap {
+	if p == nil {
+		panic("no bitmap implementation imported")
+	}
+	return p.NewWith(n)
+}
+
+func NewFrom(buf []byte) Bitmap {
+	if p == nil {
+		panic("no bitmap implementation imported")
+	}
+	return p.NewFrom(buf)
+}
+
+type Provider interface {
+	New() Bitmap
+	NewWith(n int) Bitmap
+	NewFrom(buf []byte) Bitmap
+}
 
 type Bitmap interface {
 	Set(k uint64)
@@ -31,4 +60,8 @@ type Bitmap interface {
 
 type BitmapIterator interface {
 	Next() uint64
+}
+
+func SetProvider(prv Provider) {
+	p = prv
 }

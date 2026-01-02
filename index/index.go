@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"go.linka.cloud/protofilters/filters"
+	"go.linka.cloud/protofilters/index/bitmap"
 	"go.linka.cloud/protofilters/reflect"
 )
 
@@ -177,13 +178,13 @@ func (i *index) Remove(ctx context.Context, k string) error {
 	return tx.Commit(ctx)
 }
 
-func (i *index) doFind(ctx context.Context, tx Tx, t protoreflect.FullName, f *filters.FieldFilter) (Bitmap, error) {
+func (i *index) doFind(ctx context.Context, tx Tx, t protoreflect.FullName, f *filters.FieldFilter) (bitmap.Bitmap, error) {
 	fds, err := tx.For(ctx, t)
 	if err != nil {
 		return nil, err
 	}
 
-	b := NewBitmapWith(1024)
+	b := bitmap.NewWith(1024)
 	for v, err := range fds.Get(ctx, protoreflect.Name(f.Field)) {
 		if err != nil {
 			return nil, err
@@ -206,7 +207,7 @@ func (i *index) doFind(ctx context.Context, tx Tx, t protoreflect.FullName, f *f
 	return b, nil
 }
 
-func (i *index) find(ctx context.Context, tx Tx, t protoreflect.FullName, f filters.FieldFilterer) (Bitmap, error) {
+func (i *index) find(ctx context.Context, tx Tx, t protoreflect.FullName, f filters.FieldFilterer) (bitmap.Bitmap, error) {
 	expr := f.Expr()
 	b, err := i.doFind(ctx, tx, t, expr.Condition)
 	if err != nil {

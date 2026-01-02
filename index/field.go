@@ -19,9 +19,12 @@ package index
 import (
 	"context"
 	"iter"
+	"strconv"
 
 	"github.com/cespare/xxhash/v2"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"go.linka.cloud/protofilters/index/bitmap"
 )
 
 // Field is an indexed field in the index
@@ -29,7 +32,7 @@ type Field interface {
 	// Value returns the value of the field
 	Value() protoreflect.Value
 	// Bitmap returns a Bitmap of the keys that have this value
-	Bitmap(ctx context.Context) (Bitmap, error)
+	Bitmap(ctx context.Context) (bitmap.Bitmap, error)
 	// Descriptors returns the field descriptors for this field
 	Descriptors() []protoreflect.FieldDescriptor
 }
@@ -43,14 +46,14 @@ type FieldReader interface {
 func newField(v protoreflect.Value, fds []protoreflect.FieldDescriptor) *field {
 	return &field{
 		value:       v,
-		bitmap:      NewBitmapWith(1024),
+		bitmap:      bitmap.NewWith(1024),
 		descriptors: fds,
 	}
 }
 
 type field struct {
 	value       protoreflect.Value
-	bitmap      Bitmap
+	bitmap      bitmap.Bitmap
 	descriptors []protoreflect.FieldDescriptor
 }
 
@@ -58,7 +61,7 @@ func (f *field) Value() protoreflect.Value {
 	return f.value
 }
 
-func (f *field) Bitmap(_ context.Context) (Bitmap, error) {
+func (f *field) Bitmap(_ context.Context) (bitmap.Bitmap, error) {
 	return f.bitmap, nil
 }
 
@@ -67,12 +70,20 @@ func (f *field) Descriptors() []protoreflect.FieldDescriptor {
 }
 
 func (f *field) add(k string) uint64 {
+	if i, err := strconv.ParseUint(k, 10, 64); err == nil {
+		f.bitmap.Set(i)
+		return i
+	}
 	h := xxhash.Sum64String(k)
 	f.bitmap.Set(h)
 	return h
 }
 
 func (f *field) remove(k string) {
+	if i, err := strconv.ParseUint(k, 10, 64); err == nil {
+		f.bitmap.Remove(i)
+		return
+	}
 	h := xxhash.Sum64String(k)
 	f.bitmap.Remove(h)
 }
