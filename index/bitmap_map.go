@@ -20,6 +20,7 @@ package index
 
 import (
 	"encoding/binary"
+	"iter"
 )
 
 var _ Bitmap = (*bitmap)(nil)
@@ -82,24 +83,16 @@ func (b *bitmap) Bytes() []byte {
 	return buf
 }
 
-func (b *bitmap) NewIterator() BitmapIterator {
+func (b *bitmap) Iter() iter.Seq[uint64] {
 	keys := make([]uint64, 0, len(b.m))
 	for k := range b.m {
 		keys = append(keys, k)
 	}
-	return &bitmapIterator{v: keys}
-}
-
-type bitmapIterator struct {
-	v []uint64
-	i int
-}
-
-func (i *bitmapIterator) Next() uint64 {
-	if i.i >= len(i.v) {
-		return 0
+	return func(yield func(uint64) bool) {
+		for _, k := range keys {
+			if !yield(k) {
+				return
+			}
+		}
 	}
-	v := i.v[i.i]
-	i.i++
-	return v
 }

@@ -1,5 +1,4 @@
 //go:build tools
-// +build tools
 
 /*
  Copyright 2021 Linka Cloud  All rights reserved.

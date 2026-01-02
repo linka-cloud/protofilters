@@ -183,16 +183,8 @@ func (i *index) doFind(ctx context.Context, tx Tx, t protoreflect.FullName, f *f
 		return nil, err
 	}
 
-	fit, ok, err := fds.Get(ctx, protoreflect.Name(f.Field))
-	if err != nil {
-		return nil, err
-	}
 	b := NewBitmapWith(1024)
-	if !ok {
-		return b, nil
-	}
-	for fit.Next() {
-		v, err := fit.Value()
+	for v, err := range fds.Get(ctx, protoreflect.Name(f.Field)) {
 		if err != nil {
 			return nil, err
 		}
@@ -250,14 +242,9 @@ func (i *index) Find(ctx context.Context, t protoreflect.FullName, f filters.Fie
 	if err != nil {
 		return nil, nil, err
 	}
-	it := b.NewIterator()
 	var keys []string
 	var collisions []string
-	for {
-		v := it.Next()
-		if v == 0 {
-			break
-		}
+	for v := range b.Iter() {
 		ks, err := tx.Keys(ctx, v)
 		if err != nil {
 			return nil, nil, err

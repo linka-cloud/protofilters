@@ -16,13 +16,17 @@
 
 package index
 
+import (
+	"iter"
+)
+
 type Bitmap interface {
 	Set(k uint64)
 	Remove(k uint64)
 	And(o Bitmap)
 	Or(o Bitmap)
 	Bytes() []byte
-	NewIterator() BitmapIterator
+	Iter() iter.Seq[uint64]
 }
 
 type BitmapIterator interface {

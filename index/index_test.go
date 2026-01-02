@@ -116,7 +116,7 @@ func TestIndex(t *testing.T) {
 	var di time.Duration
 	count := len(ms) * 100_000
 	t.Logf("Inserting %d records", count)
-	for j := 0; j < count; j++ {
+	for j := range count {
 		v := ms[j%len(ms)]
 		id := uuid.New().String()
 		msgs[id] = v

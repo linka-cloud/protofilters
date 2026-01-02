@@ -20,6 +20,7 @@ package index
 
 import (
 	"encoding/binary"
+	"iter"
 
 	"github.com/tidwall/btree"
 )
@@ -91,15 +92,13 @@ type bitmapIterator struct {
 	it btree.SetIter[uint64]
 }
 
-func (b *bitmap) NewIterator() BitmapIterator {
-	return &bitmapIterator{
-		it: b.s.Iter(),
+func (b *bitmap) Iter() iter.Seq[uint64] {
+	return func(yield func(uint64) bool) {
+		it := b.s.Iter()
+		for it.Next() {
+			if !yield(it.Key()) {
+				return
+			}
+		}
 	}
-}
-
-func (b *bitmapIterator) Next() uint64 {
-	if b.it.Next() {
-		return b.it.Key()
-	}
-	return 0
 }

@@ -18,6 +18,7 @@ package index
 
 import (
 	"context"
+	"iter"
 	"strings"
 	"sync"
 
@@ -81,13 +82,14 @@ type fieldReader struct {
 	m map[protoreflect.Name][]*field
 }
 
-func (f *fieldReader) Get(_ context.Context, n protoreflect.Name) (Iterator[Field], bool, error) {
-	var fields []Field
-	v, ok := f.m[n]
-	for _, v := range v {
-		fields = append(fields, v)
+func (f *fieldReader) Get(_ context.Context, n protoreflect.Name) iter.Seq2[Field, error] {
+	return func(yield func(Field, error) bool) {
+		for _, v := range f.m[n] {
+			if !yield(v, nil) {
+				return
+			}
+		}
 	}
-	return &sliceIterator[Field]{slice: fields}, ok, nil
 }
 
 func newStore() Store {

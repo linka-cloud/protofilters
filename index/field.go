@@ -18,6 +18,7 @@ package index
 
 import (
 	"context"
+	"iter"
 
 	"github.com/cespare/xxhash/v2"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -36,7 +37,7 @@ type Field interface {
 // FieldReader is an interface for reading a type fields from the index
 type FieldReader interface {
 	// Get returns the field for the given field descriptor
-	Get(ctx context.Context, f protoreflect.Name) (Iterator[Field], bool, error)
+	Get(ctx context.Context, f protoreflect.Name) iter.Seq2[Field, error]
 }
 
 func newField(v protoreflect.Value, fds []protoreflect.FieldDescriptor) *field {
