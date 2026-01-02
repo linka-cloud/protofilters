@@ -90,6 +90,9 @@ func (m *matcher) Match(msg proto.Message, f filters.FieldFilterer) (bool, error
 	if err != nil {
 		return false, err
 	}
+	if len(expr.OrExprs) == 0 && !ok {
+		return false, nil
+	}
 	andOk := true
 	for _, v := range expr.AndExprs {
 		andOk, err = m.Match(msg, v)
@@ -101,9 +104,6 @@ func (m *matcher) Match(msg proto.Message, f filters.FieldFilterer) (bool, error
 		}
 	}
 	orOk := false
-	if expr.OrExprs == nil && !ok {
-		return false, nil
-	}
 	for _, v := range expr.OrExprs {
 		orOk, err = m.Match(msg, v)
 		if err != nil {

@@ -16,84 +16,15 @@
 
 package index
 
-import (
-	"encoding/binary"
-)
-
-type Bitmap struct {
-	m map[uint64]struct{}
+type Bitmap interface {
+	Set(k uint64)
+	Remove(k uint64)
+	And(o Bitmap)
+	Or(o Bitmap)
+	Bytes() []byte
+	NewIterator() BitmapIterator
 }
 
-func NewBitmap() *Bitmap {
-	return &Bitmap{
-		m: make(map[uint64]struct{}),
-	}
-}
-
-func NewBitmapWith(size int) *Bitmap {
-	return &Bitmap{
-		m: make(map[uint64]struct{}, size),
-	}
-}
-
-func NewBitmapFrom(buf []byte) *Bitmap {
-	m := make(map[uint64]struct{}, len(buf)/8)
-	for i := 0; i < len(buf); i += 8 {
-		m[binary.LittleEndian.Uint64(buf[i:])] = struct{}{}
-	}
-	return &Bitmap{m: m}
-}
-
-func (b *Bitmap) Set(k uint64) {
-	b.m[k] = struct{}{}
-}
-
-func (b *Bitmap) Remove(k uint64) {
-	delete(b.m, k)
-}
-
-func (b *Bitmap) And(o *Bitmap) {
-	for k := range b.m {
-		if _, exists := o.m[k]; !exists {
-			delete(b.m, k)
-		}
-	}
-}
-
-func (b *Bitmap) Or(o *Bitmap) {
-	for k := range o.m {
-		b.m[k] = struct{}{}
-	}
-}
-
-func (b *Bitmap) Bytes() []byte {
-	buf := make([]byte, 8*len(b.m))
-	i := 0
-	for k := range b.m {
-		binary.LittleEndian.PutUint64(buf[i:], k)
-		i += 8
-	}
-	return buf
-}
-
-func (b *Bitmap) NewIterator() *BitmapIterator {
-	keys := make([]uint64, 0, len(b.m))
-	for k := range b.m {
-		keys = append(keys, k)
-	}
-	return &BitmapIterator{v: keys}
-}
-
-type BitmapIterator struct {
-	v []uint64
-	i int
-}
-
-func (i *BitmapIterator) Next() uint64 {
-	if i.i >= len(i.v) {
-		return 0
-	}
-	v := i.v[i.i]
-	i.i++
-	return v
+type BitmapIterator interface {
+	Next() uint64
 }

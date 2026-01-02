@@ -81,12 +81,12 @@ func TestIndex(t *testing.T) {
 	}
 	f1 := filters.Where("string_field").StringEquals("whatever").
 		Or(filters.Where("bool_field").True()).
-		And("number_field").NumberIN(42, 43).
-		Or(filters.Where("optional_bool_field").False()).
-		Or(filters.Where("message_field.string_field").StringEquals("whatever")).
-		Or(filters.Where("repeated_string_field").StringIN("one", "two")).
-		Or(filters.Where("message_field.repeated_message_field.string_field").StringEquals("whatever")).
-		Or(filters.Where("time_value_field").TimeAfter(time.Now()))
+		AndWhere("number_field").NumberIN(42, 43).
+		OrWhere("optional_bool_field").False().
+		OrWhere("message_field.string_field").StringEquals("whatever").
+		OrWhere("repeated_string_field").StringIN("one", "two").
+		OrWhere("message_field.repeated_message_field.string_field").StringEquals("whatever").
+		OrWhere("time_value_field").TimeAfter(time.Now())
 
 	i := New(nil, func(ctx context.Context, name protoreflect.FullName, fds ...protoreflect.FieldDescriptor) (bool, error) {
 		if name != "linka.cloud.test.Test" {

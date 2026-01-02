@@ -22,7 +22,9 @@ import (
 
 type Builder interface {
 	FieldFilterer
-	And(field ...string) Builder
+	AndWhere(field ...string) Builder
+	And(e FieldFilterer) Builder
+	OrWhere(field ...string) Builder
 	Or(e FieldFilterer) Builder
 	StringEquals(s string) Builder
 	StringNotEquals(s string) Builder
@@ -64,6 +66,7 @@ type Builder interface {
 	TimeBefore(t time.Time) Builder
 
 	Clone() Builder
+	Format() string
 }
 
 func Where(field string) Builder {
@@ -84,23 +87,45 @@ type builder struct {
 }
 
 func (b *builder) Expr() *Expression {
+	if b == nil {
+		return nil
+	}
 	return b.r
 }
 
-func (b *builder) And(field ...string) Builder {
-	e := &Expression{
+func (b *builder) AndWhere(field ...string) Builder {
+	c := &Expression{
 		Condition: &FieldFilter{
 			Field: Field(field...),
 		},
 	}
-	b.c = e
-	b.r.AndExprs = append(b.r.AndExprs, b.c)
+	b.r.AndExprs = append(b.r.AndExprs, c)
+	b.c = c
+	return b
+}
+
+func (b *builder) And(e FieldFilterer) Builder {
+	c := e.Expr()
+	b.r.AndExprs = append(b.r.AndExprs, e.Expr())
+	b.c = c
+	return b
+}
+
+func (b *builder) OrWhere(field ...string) Builder {
+	c := &Expression{
+		Condition: &FieldFilter{
+			Field: Field(field...),
+		},
+	}
+	b.r.OrExprs = append(b.r.OrExprs, c)
+	b.c = c
 	return b
 }
 
 func (b *builder) Or(e FieldFilterer) Builder {
-	b.r.OrExprs = append(b.r.OrExprs, e.Expr())
-	b.c = b.r
+	c := e.Expr()
+	b.r.OrExprs = append(b.r.OrExprs, c)
+	b.c = c
 	return b
 }
 
@@ -340,4 +365,8 @@ func (b *builder) Clone() Builder {
 		r: b.r.CloneVT(),
 		c: b.c.CloneVT(),
 	}
+}
+
+func (b *builder) Format() string {
+	return b.Expr().Format()
 }

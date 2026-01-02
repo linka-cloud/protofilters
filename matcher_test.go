@@ -505,9 +505,9 @@ func TestMatchExpression(t *testing.T) {
 		}},
 	}))
 	f1 := filters.Where("string_field").StringEquals("whatever").
-		And("number_field").NumberIN(42, 43).
-		Or(filters.Where("bool_field").False()).
-		Or(filters.Where("optional_bool_field").False())
+		AndWhere("number_field").NumberIN(42, 43).
+		OrWhere("bool_field").False().
+		OrWhere("optional_bool_field").False()
 
 	assert.True(Match(m, f1))
 	f2 := &filters.Expression{

@@ -28,7 +28,7 @@ type Field interface {
 	// Value returns the value of the field
 	Value() protoreflect.Value
 	// Bitmap returns a Bitmap of the keys that have this value
-	Bitmap(ctx context.Context) (*Bitmap, error)
+	Bitmap(ctx context.Context) (Bitmap, error)
 	// Descriptors returns the field descriptors for this field
 	Descriptors() []protoreflect.FieldDescriptor
 }
@@ -49,7 +49,7 @@ func newField(v protoreflect.Value, fds []protoreflect.FieldDescriptor) *field {
 
 type field struct {
 	value       protoreflect.Value
-	bitmap      *Bitmap
+	bitmap      Bitmap
 	descriptors []protoreflect.FieldDescriptor
 }
 
@@ -57,7 +57,7 @@ func (f *field) Value() protoreflect.Value {
 	return f.value
 }
 
-func (f *field) Bitmap(_ context.Context) (*Bitmap, error) {
+func (f *field) Bitmap(_ context.Context) (Bitmap, error) {
 	return f.bitmap, nil
 }
 
