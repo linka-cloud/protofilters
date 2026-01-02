@@ -17,10 +17,12 @@
 package filters
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormat(t *testing.T) {
@@ -105,7 +107,160 @@ func TestFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, tt.input.Expr().Format())
+			s := tt.input.Expr().Format()
+			assert.Equal(t, tt.expected, s)
+			e, err := ParseExpression(s)
+			require.NoError(t, err)
+			assert.Equal(t, tt.input.Expr().String(), e.String(), s)
 		})
+	}
+}
+
+func TestParseExpression(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"Simple", "name eq 'John'"},
+		{"Nested", "name eq 'John' and (age sup 30 or active is true)"},
+		{"CaseInsensitive", "name ieq 'john'"},
+		{"NumberList", "age in (1, 2, 3)"},
+		{"StringList", "name in ('a', 'b')"},
+		{"Duration", "timeout sup 300ms"},
+		{"Time", "created before 1970-01-01T00:00:00Z"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expr, err := ParseExpression(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.input, expr.Format())
+		})
+	}
+}
+
+func TestParseExpressionErrors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"MissingField", "eq 'John'"},
+		{"InvalidLiteral", "name eq 'foo"},
+		{"BadTimestamp", "created before not-a-date"},
+		{"UnbalancedParen", "(name eq 'John'"},
+		{"EmptyIn", "name in ()"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseExpression(tt.input)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestParseFilterRoundTrip(t *testing.T) {
+	filters := sampleFilters()
+	for i, f := range filters {
+		t.Run(fmt.Sprintf("filter-%d", i), func(t *testing.T) {
+			ff := &FieldFilter{Field: fmt.Sprintf("f_%d", i), Filter: f}
+			expr := ff.Format()
+			parsed, err := ParseFieldFilter(expr)
+			require.NoError(t, err)
+			assert.Equal(t, ff.String(), parsed.String())
+		})
+	}
+}
+
+func TestParseFilter(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		expectResp string
+	}{
+		{"StringEquals", "EQ 'John'", "eq 'John'"},
+		{"DoubleNot", "not not eq 10", "eq 10"},
+		{"StringIEquals", "ieq 'john'", "ieq 'john'"},
+		{"HasPrefix", "ihas_prefix 'Foo'", "ihas_prefix 'Foo'"},
+		{"StringIn", "in ( 'a', 'b' )", "in ('a', 'b')"},
+		{"NumberIn", "in(1,2)", "in (1, 2)"},
+		{"NumberInf", "inf 5", "inf 5"},
+		{"NumberSup", "sup 10", "sup 10"},
+		{"StringSup", "sup 'z'", "sup 'z'"},
+		{"DurationSup", "sup 300ms", "sup 300ms"},
+		{"TimeBefore", "before 1970-01-01T00:00:00Z", "before 1970-01-01T00:00:00Z"},
+		{"TimeAfter", "after 1970-01-01T00:00:00Z", "after 1970-01-01T00:00:00Z"},
+		{"BoolTrue", "is true", "is true"},
+		{"BoolFalse", "is false", "is false"},
+		{"Null", "is null", "is null"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter, err := ParseFilter(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectResp, filter.Format())
+		})
+	}
+}
+
+func FuzzParseFilterRoundTrip(f *testing.F) {
+	for _, filter := range sampleFilters() {
+		f.Add(filter.Format())
+	}
+	f.Add("")
+	f.Add("eq 'unterminated")
+	f.Add("name in ()")
+	f.Add("not")
+	f.Add("(")
+
+	f.Fuzz(func(t *testing.T, input string) {
+		parsed, err := ParseFilter(input)
+		if err != nil {
+			return
+		}
+		formatted := parsed.Format()
+		reparsed, err := ParseFilter(formatted)
+		require.NoError(t, err)
+		assert.Equal(t, formatted, reparsed.Format())
+	})
+}
+
+func sampleFilters() []*Filter {
+	return []*Filter{
+		StringEquals("John"),
+		StringNotEquals("John"),
+		StringIEquals("john"),
+		StringHasPrefix("Jo"),
+		StringNotHasPrefix("Jo"),
+		StringIHasPrefix("jo"),
+		StringNotIHasPrefix("jo"),
+		StringHasSuffix("hn"),
+		StringNotHasSuffix("hn"),
+		StringIHasSuffix("hn"),
+		StringNotIHasSuffix("hn"),
+		StringRegex("Jo.*"),
+		StringNotRegex("Jo.*"),
+		StringIN("a", "b"),
+		StringNotIN("a", "b"),
+		StringInf("a"),
+		StringSup("z"),
+		StringIInf("a"),
+		StringISup("z"),
+		NumberEquals(1),
+		NumberNotEquals(1),
+		NumberInf(1),
+		NumberSup(1),
+		NumberIN(1, 2),
+		NumberNotIN(1, 2),
+		True(),
+		False(),
+		Null(),
+		NotNull(),
+		DurationEquals(time.Millisecond),
+		DurationNotEquals(time.Millisecond),
+		DurationInf(time.Millisecond),
+		DurationSup(time.Millisecond),
+		TimeEquals(time.Unix(0, 0)),
+		TimeNotEquals(time.Unix(0, 0)),
+		TimeBefore(time.Unix(0, 0)),
+		TimeAfter(time.Unix(0, 0)),
 	}
 }
