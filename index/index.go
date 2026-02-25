@@ -23,6 +23,8 @@ import (
 	"strings"
 
 	"github.com/cespare/xxhash/v2"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
@@ -30,6 +32,8 @@ import (
 	"go.linka.cloud/protofilters/index/bitmap"
 	preflect "go.linka.cloud/protofilters/reflect"
 )
+
+var tracer = otel.Tracer("go.linka.cloud/protofilters/index")
 
 func All(_ context.Context, _ protoreflect.FullName, _ ...protoreflect.FieldDescriptor) (bool, error) {
 	return true, nil
@@ -80,6 +84,15 @@ func New(s Store, fn Func) Index {
 }
 
 func (i *index) index(ctx context.Context, tx Tx, k string, m protoreflect.Message, fds ...protoreflect.FieldDescriptor) error {
+	ctx, span := tracer.Start(ctx, "index.index")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("index.type", string(m.Descriptor().FullName())),
+		attribute.Int("index.depth", len(fds)),
+	)
+	if len(fds) > 0 {
+		span.SetAttributes(attribute.String("index.field", string(joinFieldNames(fds))))
+	}
 	f := m.Descriptor().Fields()
 	name := m.Descriptor().FullName()
 	if len(fds) > 0 {
@@ -102,6 +115,7 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m protoreflect.Messa
 						return err
 					}
 				}
+				continue
 			}
 			list := rval.List()
 			for j2 := 0; j2 < list.Len(); j2++ {
@@ -136,8 +150,13 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m protoreflect.Messa
 	return nil
 }
 
-// Insert indexes a message fields with the given key.
+// Insert indexes message fields with the given key.
 func (i *index) Insert(ctx context.Context, k string, m proto.Message) error {
+	ctx, span := tracer.Start(ctx, "index.Insert")
+	defer span.End()
+	if m != nil {
+		span.SetAttributes(attribute.String("index.type", string(m.ProtoReflect().Descriptor().FullName())))
+	}
 	tx, err := i.store.Tx(ctx)
 	if err != nil {
 		return err
@@ -150,6 +169,15 @@ func (i *index) Insert(ctx context.Context, k string, m proto.Message) error {
 }
 
 func (i *index) Update(ctx context.Context, k string, old, m proto.Message) error {
+	ctx, span := tracer.Start(ctx, "index.Update")
+	defer span.End()
+	if m != nil {
+		span.SetAttributes(attribute.String("index.type", string(m.ProtoReflect().Descriptor().FullName())))
+	}
+	span.SetAttributes(
+		attribute.Bool("index.has_old", old != nil),
+		attribute.Bool("index.has_new", m != nil),
+	)
 	tx, err := i.store.Tx(ctx)
 	if err != nil {
 		return err
@@ -218,6 +246,7 @@ func (i *index) collectValuesInto(ctx context.Context, out map[string]fieldValue
 						return err
 					}
 				}
+				continue
 			}
 			list := rval.List()
 			for j2 := 0; j2 < list.Len(); j2++ {
@@ -376,6 +405,8 @@ func keyHash(k string) uint64 {
 }
 
 func (i *index) Remove(ctx context.Context, k string) error {
+	ctx, span := tracer.Start(ctx, "index.Remove")
+	defer span.End()
 	tx, err := i.store.Tx(ctx)
 	if err != nil {
 		return err
@@ -440,8 +471,14 @@ func (i *index) find(ctx context.Context, tx Tx, t protoreflect.FullName, f filt
 }
 
 func (i *index) Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, []string, error) {
+	ctx, span := tracer.Start(ctx, "index.Find")
+	defer span.End()
+	span.SetAttributes(attribute.String("index.type", string(t)))
 	if f == nil || f.Expr() == nil {
 		return nil, nil, nil
+	}
+	if expr := f.Expr(); expr != nil {
+		span.SetAttributes(attribute.String("index.filter", expr.Format()))
 	}
 	tx, err := i.store.Tx(ctx)
 	if err != nil {
