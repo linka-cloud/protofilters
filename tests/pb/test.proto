@@ -45,4 +45,10 @@ message Test {
   optional int64 optional_number_field = 14;
   optional bool optional_bool_field = 15;
   optional Type optional_enum_field = 16;
+
+  oneof choice {
+    string oneof_string_field = 17;
+    int64 oneof_number_field = 18;
+    Test oneof_message_field = 19;
+  }
 }

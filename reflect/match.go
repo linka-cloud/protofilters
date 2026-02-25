@@ -122,6 +122,13 @@ func matchNumber(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (b
 		return checkNot(f, match, err)
 	}
 	var val *float64
+	if !rval.IsValid() {
+		if fd.HasOptionalKeyword() {
+			match, err := f.GetNumber().Match(nil)
+			return checkNot(f, match, err)
+		}
+		return false, fmt.Errorf("cannot use number filter on %s", fd.Kind().String())
+	}
 	switch fd.Kind() {
 	case pref.Int32Kind,
 		pref.Sint32Kind,

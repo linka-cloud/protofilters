@@ -6,8 +6,6 @@ package test
 
 import (
 	fmt "fmt"
-	io "io"
-
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	durationpb1 "github.com/planetscale/vtprotobuf/types/known/durationpb"
 	timestamppb1 "github.com/planetscale/vtprotobuf/types/known/timestamppb"
@@ -17,6 +15,7 @@ import (
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
+	io "io"
 )
 
 const (
@@ -69,6 +68,9 @@ func (m *Test) CloneVT() *Test {
 		tmpVal := *rhs
 		r.OptionalEnumField = &tmpVal
 	}
+	if m.Choice != nil {
+		r.Choice = m.Choice.(interface{ CloneVT() isTest_Choice }).CloneVT()
+	}
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
 		copy(r.unknownFields, m.unknownFields)
@@ -78,6 +80,33 @@ func (m *Test) CloneVT() *Test {
 
 func (m *Test) CloneMessageVT() proto.Message {
 	return m.CloneVT()
+}
+
+func (m *Test_OneofStringField) CloneVT() isTest_Choice {
+	if m == nil {
+		return (*Test_OneofStringField)(nil)
+	}
+	r := new(Test_OneofStringField)
+	r.OneofStringField = m.OneofStringField
+	return r
+}
+
+func (m *Test_OneofNumberField) CloneVT() isTest_Choice {
+	if m == nil {
+		return (*Test_OneofNumberField)(nil)
+	}
+	r := new(Test_OneofNumberField)
+	r.OneofNumberField = m.OneofNumberField
+	return r
+}
+
+func (m *Test_OneofMessageField) CloneVT() isTest_Choice {
+	if m == nil {
+		return (*Test_OneofMessageField)(nil)
+	}
+	r := new(Test_OneofMessageField)
+	r.OneofMessageField = m.OneofMessageField.CloneVT()
+	return r
 }
 
 func (m *Test) MarshalVT() (dAtA []byte, err error) {
@@ -109,6 +138,15 @@ func (m *Test) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if vtmsg, ok := m.Choice.(interface {
+		MarshalToSizedBufferVT([]byte) (int, error)
+	}); ok {
+		size, err := vtmsg.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
 	}
 	if m.OptionalEnumField != nil {
 		i = protohelpers.EncodeVarint(dAtA, i, uint64(*m.OptionalEnumField))
@@ -250,6 +288,57 @@ func (m *Test) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *Test_OneofStringField) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *Test_OneofStringField) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i -= len(m.OneofStringField)
+	copy(dAtA[i:], m.OneofStringField)
+	i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.OneofStringField)))
+	i--
+	dAtA[i] = 0x1
+	i--
+	dAtA[i] = 0x8a
+	return len(dAtA) - i, nil
+}
+func (m *Test_OneofNumberField) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *Test_OneofNumberField) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i = protohelpers.EncodeVarint(dAtA, i, uint64(m.OneofNumberField))
+	i--
+	dAtA[i] = 0x1
+	i--
+	dAtA[i] = 0x90
+	return len(dAtA) - i, nil
+}
+func (m *Test_OneofMessageField) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *Test_OneofMessageField) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.OneofMessageField != nil {
+		size, err := m.OneofMessageField.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x9a
+	}
+	return len(dAtA) - i, nil
+}
 func (m *Test) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -318,10 +407,44 @@ func (m *Test) SizeVT() (n int) {
 	if m.OptionalEnumField != nil {
 		n += 2 + protohelpers.SizeOfVarint(uint64(*m.OptionalEnumField))
 	}
+	if vtmsg, ok := m.Choice.(interface{ SizeVT() int }); ok {
+		n += vtmsg.SizeVT()
+	}
 	n += len(m.unknownFields)
 	return n
 }
 
+func (m *Test_OneofStringField) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.OneofStringField)
+	n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	return n
+}
+func (m *Test_OneofNumberField) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	n += 2 + protohelpers.SizeOfVarint(uint64(m.OneofNumberField))
+	return n
+}
+func (m *Test_OneofMessageField) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.OneofMessageField != nil {
+		l = m.OneofMessageField.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
 func (m *Test) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -817,6 +940,99 @@ func (m *Test) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			m.OptionalEnumField = &v
+		case 17:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OneofStringField", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Choice = &Test_OneofStringField{OneofStringField: string(dAtA[iNdEx:postIndex])}
+			iNdEx = postIndex
+		case 18:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OneofNumberField", wireType)
+			}
+			var v int64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Choice = &Test_OneofNumberField{OneofNumberField: v}
+		case 19:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OneofMessageField", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Choice.(*Test_OneofMessageField); ok {
+				if err := oneof.OneofMessageField.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &Test{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Choice = &Test_OneofMessageField{OneofMessageField: v}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])

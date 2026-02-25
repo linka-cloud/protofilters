@@ -18,13 +18,17 @@ package index
 
 import (
 	"context"
+	"reflect"
+	"strconv"
+	"strings"
 
+	"github.com/cespare/xxhash/v2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"go.linka.cloud/protofilters/filters"
 	"go.linka.cloud/protofilters/index/bitmap"
-	"go.linka.cloud/protofilters/reflect"
+	preflect "go.linka.cloud/protofilters/reflect"
 )
 
 func All(_ context.Context, _ protoreflect.FullName, _ ...protoreflect.FieldDescriptor) (bool, error) {
@@ -40,8 +44,8 @@ type Func func(ctx context.Context, name protoreflect.FullName, fds ...protorefl
 type Index interface {
 	// Insert inserts and indexes the given message with the given key
 	Insert(ctx context.Context, k string, m proto.Message) error
-	// Update updates the index for the given message with the given key
-	Update(ctx context.Context, k string, m proto.Message) error
+	// Update updates the index for the given key using old and new messages
+	Update(ctx context.Context, k string, old, m proto.Message) error
 	// Remove removes the given key from the index
 	Remove(ctx context.Context, k string) error
 	// Find returns the keys of the messages that match the given FieldFilterer
@@ -110,7 +114,7 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m protoreflect.Messa
 		if fd.IsMap() {
 			continue
 		}
-		if fd.Kind() == protoreflect.MessageKind && !reflect.IsWKType(fd.Message().FullName()) {
+		if fd.Kind() == protoreflect.MessageKind && !preflect.IsWKType(fd.Message().FullName()) {
 			if !rval.Message().IsValid() {
 				continue
 			}
@@ -145,25 +149,230 @@ func (i *index) Insert(ctx context.Context, k string, m proto.Message) error {
 	return tx.Commit(ctx)
 }
 
-func (i *index) Update(ctx context.Context, k string, m proto.Message) error {
+func (i *index) Update(ctx context.Context, k string, old, m proto.Message) error {
 	tx, err := i.store.Tx(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Close()
-	f := m.ProtoReflect().Descriptor().Fields()
+	oldValues := map[string]fieldValues{}
+	newValues := map[string]fieldValues{}
+	if old != nil {
+		if oldValues, err = i.collectValues(ctx, old.ProtoReflect()); err != nil {
+			return err
+		}
+	}
+	if m != nil {
+		if newValues, err = i.collectValues(ctx, m.ProtoReflect()); err != nil {
+			return err
+		}
+	}
+	if len(oldValues) > 0 {
+		fr, err := tx.For(ctx, old.ProtoReflect().Descriptor().FullName())
+		if err != nil {
+			return err
+		}
+		if err := applyDiff(ctx, fr, tx, k, oldValues, newValues); err != nil {
+			return err
+		}
+	} else {
+		for _, fv := range newValues {
+			for _, v := range fv.values {
+				if err := tx.Add(ctx, k, v, fv.fds...); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+type fieldValues struct {
+	fds    []protoreflect.FieldDescriptor
+	values []protoreflect.Value
+}
+
+func (i *index) collectValues(ctx context.Context, m protoreflect.Message) (map[string]fieldValues, error) {
+	values := map[string]fieldValues{}
+	if err := i.collectValuesInto(ctx, values, m); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func (i *index) collectValuesInto(ctx context.Context, out map[string]fieldValues, m protoreflect.Message, fds ...protoreflect.FieldDescriptor) error {
+	f := m.Descriptor().Fields()
+	name := m.Descriptor().FullName()
 	for j := 0; j < f.Len(); j++ {
 		fd := f.Get(j)
-		if !fd.IsList() {
-			if err := tx.Remove(ctx, k, fd, m.ProtoReflect().Get(fd)); err != nil {
+		path := append(fds, fd)
+		ok, err := i.fn(ctx, name, path...)
+		if err != nil {
+			return err
+		}
+		rval := m.Get(fd)
+		if fd.IsList() {
+			if fd.Kind() == protoreflect.MessageKind {
+				for j2 := 0; j2 < rval.List().Len(); j2++ {
+					if err := i.collectValuesInto(ctx, out, rval.List().Get(j2).Message(), path...); err != nil {
+						return err
+					}
+				}
+			}
+			list := rval.List()
+			for j2 := 0; j2 < list.Len(); j2++ {
+				out = appendValue(out, path, list.Get(j2))
+			}
+			continue
+		}
+		if fd.IsMap() {
+			continue
+		}
+		if fd.Kind() == protoreflect.MessageKind && !preflect.IsWKType(fd.Message().FullName()) {
+			if !rval.Message().IsValid() {
+				continue
+			}
+			if err := i.collectValuesInto(ctx, out, rval.Message(), path...); err != nil {
+				return err
+			}
+			continue
+		}
+		if fd.HasOptionalKeyword() && !m.Has(fd) {
+			rval = protoreflect.Value{}
+		}
+		if !ok {
+			continue
+		}
+		out = appendValue(out, path, rval)
+	}
+	return nil
+}
+
+func appendValue(out map[string]fieldValues, fds []protoreflect.FieldDescriptor, v protoreflect.Value) map[string]fieldValues {
+	key := string(joinFieldNames(fds))
+	fv := out[key]
+	if fv.fds == nil {
+		fv.fds = append([]protoreflect.FieldDescriptor(nil), fds...)
+	}
+	for _, existing := range fv.values {
+		if valueEqual(existing, v) {
+			out[key] = fv
+			return out
+		}
+	}
+	fv.values = append(fv.values, v)
+	out[key] = fv
+	return out
+}
+
+func applyDiff(ctx context.Context, fr FieldReader, tx Tx, k string, oldValues, newValues map[string]fieldValues) error {
+	seen := map[string]struct{}{}
+	for key := range oldValues {
+		seen[key] = struct{}{}
+	}
+	for key := range newValues {
+		seen[key] = struct{}{}
+	}
+	for key := range seen {
+		ov := oldValues[key]
+		nv := newValues[key]
+		remove, add := diffValues(ov.values, nv.values)
+		for _, v := range remove {
+			if err := removeValue(ctx, fr, k, v, ov.fds...); err != nil {
+				return err
+			}
+		}
+		for _, v := range add {
+			if err := tx.Add(ctx, k, v, nv.fds...); err != nil {
 				return err
 			}
 		}
 	}
-	if err := i.index(ctx, tx, k, m.ProtoReflect()); err != nil {
-		return err
+	return nil
+}
+
+func diffValues(oldValues, newValues []protoreflect.Value) (remove []protoreflect.Value, add []protoreflect.Value) {
+	used := make([]bool, len(newValues))
+	for _, ov := range oldValues {
+		found := false
+		for i, nv := range newValues {
+			if used[i] {
+				continue
+			}
+			if valueEqual(ov, nv) {
+				used[i] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			remove = append(remove, ov)
+		}
 	}
-	return tx.Commit(ctx)
+	for i, nv := range newValues {
+		if !used[i] {
+			add = append(add, nv)
+		}
+	}
+	return remove, add
+}
+
+func removeValue(ctx context.Context, fr FieldReader, k string, v protoreflect.Value, fds ...protoreflect.FieldDescriptor) error {
+	if len(fds) == 0 {
+		return nil
+	}
+	name := joinFieldNames(fds)
+	h := keyHash(k)
+	for f, err := range fr.Get(ctx, name) {
+		if err != nil {
+			return err
+		}
+		if !valueEqual(f.Value(), v) {
+			continue
+		}
+		b, err := f.Bitmap(ctx)
+		if err != nil {
+			return err
+		}
+		b.Remove(h)
+		return nil
+	}
+	return nil
+}
+
+func joinFieldNames(fds []protoreflect.FieldDescriptor) protoreflect.Name {
+	if len(fds) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(string(fds[0].Name()))
+	for _, fd := range fds[1:] {
+		b.WriteByte('.')
+		b.WriteString(string(fd.Name()))
+	}
+	return protoreflect.Name(b.String())
+}
+
+func valueEqual(a, b protoreflect.Value) bool {
+	av := a.Interface()
+	bv := b.Interface()
+	if av == nil || bv == nil {
+		return av == bv
+	}
+	if reflect.TypeOf(av) != reflect.TypeOf(bv) {
+		return false
+	}
+	if reflect.TypeOf(av).Comparable() {
+		return av == bv
+	}
+	return reflect.DeepEqual(av, bv)
+}
+
+func keyHash(k string) uint64 {
+	if i, err := strconv.ParseUint(k, 10, 64); err == nil {
+		return i
+	}
+	return xxhash.Sum64String(k)
 }
 
 func (i *index) Remove(ctx context.Context, k string) error {
@@ -191,7 +400,7 @@ func (i *index) doFind(ctx context.Context, tx Tx, t protoreflect.FullName, f *f
 		}
 		ds := v.Descriptors()
 		fd := ds[len(ds)-1]
-		ok, err := reflect.Match(v.Value(), fd, f.Filter)
+		ok, err := preflect.Match(v.Value(), fd, f.Filter)
 		if err != nil {
 			return nil, err
 		}
