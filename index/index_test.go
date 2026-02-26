@@ -541,6 +541,79 @@ func TestNumericAndHashedKeys(t *testing.T) {
 	assert.Contains(t, keys, "abc")
 }
 
+func TestCreateUpdateDeleteRemovesStaleEntries(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, id := range []string{"1", "abc"} {
+		t.Run(id, func(t *testing.T) {
+			s := newStore()
+			i := New(s, All)
+			oldMsg := &test.Test{StringField: "created", NumberField: 1}
+			newMsg := &test.Test{StringField: "updated", NumberField: 2}
+
+			require.NoError(t, i.Insert(ctx, id, oldMsg))
+			assertStoreHasValueForKey(t, ctx, s, "linka.cloud.test.Test", "string_field", protoreflect.ValueOfString("created"), id, true)
+
+			keys, collisions, err := i.Find(ctx, "linka.cloud.test.Test",
+				filters.Where("string_field").StringEquals("created"),
+			)
+			require.NoError(t, err)
+			require.Empty(t, collisions)
+			assert.Contains(t, keys, id)
+
+			require.NoError(t, i.Update(ctx, id, oldMsg, newMsg))
+
+			keys, collisions, err = i.Find(ctx, "linka.cloud.test.Test",
+				filters.Where("string_field").StringEquals("created"),
+			)
+			require.NoError(t, err)
+			require.Empty(t, collisions)
+			assert.NotContains(t, keys, id)
+			assertStoreHasValueForKey(t, ctx, s, "linka.cloud.test.Test", "string_field", protoreflect.ValueOfString("created"), id, false)
+
+			keys, collisions, err = i.Find(ctx, "linka.cloud.test.Test",
+				filters.Where("string_field").StringEquals("updated"),
+			)
+			require.NoError(t, err)
+			require.Empty(t, collisions)
+			assert.Contains(t, keys, id)
+			assertStoreHasValueForKey(t, ctx, s, "linka.cloud.test.Test", "string_field", protoreflect.ValueOfString("updated"), id, true)
+
+			require.NoError(t, i.Remove(ctx, id))
+
+			keys, collisions, err = i.Find(ctx, "linka.cloud.test.Test",
+				filters.Where("string_field").StringEquals("updated"),
+			)
+			require.NoError(t, err)
+			require.Empty(t, collisions)
+			assert.NotContains(t, keys, id)
+			assertStoreHasValueForKey(t, ctx, s, "linka.cloud.test.Test", "string_field", protoreflect.ValueOfString("updated"), id, false)
+		})
+	}
+}
+
+func assertStoreHasValueForKey(t *testing.T, ctx context.Context, s Store, typ protoreflect.FullName, field protoreflect.Name, val protoreflect.Value, key string, want bool) {
+	t.Helper()
+
+	fr, err := s.For(ctx, typ)
+	require.NoError(t, err)
+
+	h := keyHash(key)
+	has := false
+	for f, err := range fr.Get(ctx, field) {
+		require.NoError(t, err)
+		if !valueEqual(f.Value(), val) {
+			continue
+		}
+		b, err := f.Bitmap(ctx)
+		require.NoError(t, err)
+		has = b.Contains(h)
+		break
+	}
+	assert.Equal(t, want, has)
+}
+
 func TestDeepNestedUpdateClears(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
