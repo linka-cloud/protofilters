@@ -54,6 +54,11 @@ type bitmap struct {
 	m map[uint64]struct{}
 }
 
+func (b *bitmap) Contains(k uint64) bool {
+	_, ok := b.m[k]
+	return ok
+}
+
 func (b *bitmap) Set(k uint64) {
 	b.m[k] = struct{}{}
 }

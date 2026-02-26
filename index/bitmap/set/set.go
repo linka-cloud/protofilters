@@ -58,6 +58,10 @@ type bitmap struct {
 	s *btree.Set[uint64]
 }
 
+func (b *bitmap) Contains(k uint64) bool {
+	return b.s.Contains(k)
+}
+
 func (b *bitmap) Set(k uint64) {
 	b.s.Insert(k)
 }

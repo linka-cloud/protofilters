@@ -56,6 +56,10 @@ type bitmap struct {
 	m *sroar.Bitmap
 }
 
+func (r *bitmap) Contains(k uint64) bool {
+	return r.m.Contains(k)
+}
+
 func (r *bitmap) Set(k uint64) {
 	r.m.Set(k)
 }

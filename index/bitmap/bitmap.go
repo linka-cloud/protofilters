@@ -54,6 +54,7 @@ type Bitmap interface {
 	Remove(k uint64)
 	And(o Bitmap)
 	Or(o Bitmap)
+	Contains(k uint64) bool
 	Bytes() []byte
 	Iter() iter.Seq[uint64]
 }
