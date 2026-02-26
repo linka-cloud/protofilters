@@ -56,6 +56,10 @@ type bitmap struct {
 	m *sroar.Bitmap
 }
 
+func (r *bitmap) Cardinality() uint64 {
+	return uint64(r.m.GetCardinality())
+}
+
 func (r *bitmap) Contains(k uint64) bool {
 	return r.m.Contains(k)
 }

@@ -55,6 +55,7 @@ type Bitmap interface {
 	And(o Bitmap)
 	Or(o Bitmap)
 	Contains(k uint64) bool
+	Cardinality() uint64
 	Bytes() []byte
 	Iter() iter.Seq[uint64]
 }

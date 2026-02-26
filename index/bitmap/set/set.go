@@ -58,6 +58,10 @@ type bitmap struct {
 	s *btree.Set[uint64]
 }
 
+func (b *bitmap) Cardinality() uint64 {
+	return uint64(b.s.Len())
+}
+
 func (b *bitmap) Contains(k uint64) bool {
 	return b.s.Contains(k)
 }

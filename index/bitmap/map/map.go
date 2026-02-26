@@ -54,6 +54,10 @@ type bitmap struct {
 	m map[uint64]struct{}
 }
 
+func (b *bitmap) Cardinality() uint64 {
+	return uint64(len(b.m))
+}
+
 func (b *bitmap) Contains(k uint64) bool {
 	_, ok := b.m[k]
 	return ok
