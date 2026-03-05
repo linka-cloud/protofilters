@@ -436,6 +436,58 @@ func TestUpdateOneofSwitch(t *testing.T) {
 	assert.Contains(t, keys, "1")
 }
 
+func TestOneofUnsetDoesNotMatchDefaultValue(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	i := New(nil, All)
+	require.NoError(t, i.Insert(ctx, "1", &test.Test{Choice: &test.Test_OneofStringField{OneofStringField: "a"}}))
+	require.NoError(t, i.Insert(ctx, "2", &test.Test{Choice: &test.Test_OneofNumberField{OneofNumberField: 0}}))
+	require.NoError(t, i.Insert(ctx, "3", &test.Test{}))
+	require.NoError(t, i.Insert(ctx, "4", &test.Test{Choice: &test.Test_OneofStringField{OneofStringField: ""}}))
+
+	keys, collisions, err := i.Find(ctx, "linka.cloud.test.Test",
+		filters.Where("oneof_number_field").NumberEquals(0),
+	)
+	require.NoError(t, err)
+	require.Empty(t, collisions)
+	assert.Contains(t, keys, "2")
+	assert.NotContains(t, keys, "1")
+	assert.NotContains(t, keys, "3")
+	assert.NotContains(t, keys, "4")
+
+	keys, collisions, err = i.Find(ctx, "linka.cloud.test.Test",
+		filters.Where("oneof_string_field").StringEquals(""),
+	)
+	require.NoError(t, err)
+	require.Empty(t, collisions)
+	assert.Contains(t, keys, "4")
+	assert.NotContains(t, keys, "1")
+	assert.NotContains(t, keys, "2")
+	assert.NotContains(t, keys, "3")
+}
+
+func TestOneofNotEqualsRequiresSelectedField(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	i := New(nil, All)
+	require.NoError(t, i.Insert(ctx, "1", &test.Test{Choice: &test.Test_OneofStringField{OneofStringField: "a"}}))
+	require.NoError(t, i.Insert(ctx, "2", &test.Test{Choice: &test.Test_OneofNumberField{OneofNumberField: 0}}))
+	require.NoError(t, i.Insert(ctx, "3", &test.Test{}))
+	require.NoError(t, i.Insert(ctx, "4", &test.Test{Choice: &test.Test_OneofNumberField{OneofNumberField: 1}}))
+
+	keys, collisions, err := i.Find(ctx, "linka.cloud.test.Test",
+		filters.Where("oneof_number_field").NumberNotEquals(0),
+	)
+	require.NoError(t, err)
+	require.Empty(t, collisions)
+	assert.Contains(t, keys, "4")
+	assert.NotContains(t, keys, "1")
+	assert.NotContains(t, keys, "2")
+	assert.NotContains(t, keys, "3")
+}
+
 func TestRepeatedEmptyStringAndClear(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

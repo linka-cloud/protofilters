@@ -105,6 +105,9 @@ func (i *index) index(ctx context.Context, tx Tx, k string, m protoreflect.Messa
 		if err != nil {
 			return err
 		}
+		if isUnsetRealOneofField(m, fd) {
+			continue
+		}
 		rval := m.Get(fd)
 		if fd.IsList() {
 			// we don't index lists of messages
@@ -238,6 +241,9 @@ func (i *index) collectValuesInto(ctx context.Context, out map[string]fieldValue
 		if err != nil {
 			return err
 		}
+		if isUnsetRealOneofField(m, fd) {
+			continue
+		}
 		rval := m.Get(fd)
 		if fd.IsList() {
 			if fd.Kind() == protoreflect.MessageKind {
@@ -292,6 +298,14 @@ func appendValue(out map[string]fieldValues, fds []protoreflect.FieldDescriptor,
 	fv.values = append(fv.values, v)
 	out[key] = fv
 	return out
+}
+
+func isUnsetRealOneofField(m protoreflect.Message, fd protoreflect.FieldDescriptor) bool {
+	oneof := fd.ContainingOneof()
+	if oneof == nil || oneof.IsSynthetic() {
+		return false
+	}
+	return !m.Has(fd)
 }
 
 func applyDiff(ctx context.Context, fr FieldReader, tx Tx, k string, oldValues, newValues map[string]fieldValues) error {

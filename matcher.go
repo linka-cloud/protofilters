@@ -152,6 +152,9 @@ func (m *matcher) doMatch(msg pref.Message, filter *filters.Filter, fds []pref.F
 	}
 	fd := fds[0]
 	fds = fds[1:]
+	if isUnsetRealOneofField(msg, fd) {
+		return false, nil
+	}
 	rval := msg.Get(fd)
 	if len(fds) != 0 {
 		if fd.Kind() == pref.MessageKind && fd.IsList() && !iterating {
@@ -197,6 +200,14 @@ func (m *matcher) doMatch(msg pref.Message, filter *filters.Filter, fds []pref.F
 		return false, err
 	}
 	return ok, nil
+}
+
+func isUnsetRealOneofField(msg pref.Message, fd pref.FieldDescriptor) bool {
+	oneof := fd.ContainingOneof()
+	if oneof == nil || oneof.IsSynthetic() {
+		return false
+	}
+	return !msg.Has(fd)
 }
 
 func (m *matcher) matchFilter(msg proto.Message, path string, filter *filters.Filter) (bool, error) {

@@ -446,6 +446,64 @@ func TestOptional(t *testing.T) {
 	}))
 }
 
+func TestOneofUnsetDoesNotMatchDefaultValue(t *testing.T) {
+	assert := assert.New(t)
+
+	m := &test.Test{Choice: &test.Test_OneofStringField{OneofStringField: "a"}}
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "oneof_number_field",
+		Filter: filters.NumberEquals(0),
+	}))
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "oneof_string_field",
+		Filter: filters.StringEquals(""),
+	}))
+
+	m = &test.Test{}
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "oneof_number_field",
+		Filter: filters.NumberEquals(0),
+	}))
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "oneof_string_field",
+		Filter: filters.StringEquals(""),
+	}))
+
+	m = &test.Test{Choice: &test.Test_OneofNumberField{OneofNumberField: 0}}
+	assert.True(MatchFilters(m, &filters.FieldFilter{
+		Field:  "oneof_number_field",
+		Filter: filters.NumberEquals(0),
+	}))
+}
+
+func TestOneofNotEqualsRequiresSelectedField(t *testing.T) {
+	assert := assert.New(t)
+
+	m := &test.Test{Choice: &test.Test_OneofStringField{OneofStringField: "a"}}
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "oneof_number_field",
+		Filter: filters.NumberNotEquals(0),
+	}))
+
+	m = &test.Test{}
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "oneof_number_field",
+		Filter: filters.NumberNotEquals(0),
+	}))
+
+	m = &test.Test{Choice: &test.Test_OneofNumberField{OneofNumberField: 1}}
+	assert.True(MatchFilters(m, &filters.FieldFilter{
+		Field:  "oneof_number_field",
+		Filter: filters.NumberNotEquals(0),
+	}))
+
+	m = &test.Test{Choice: &test.Test_OneofNumberField{OneofNumberField: 0}}
+	assert.False(MatchFilters(m, &filters.FieldFilter{
+		Field:  "oneof_number_field",
+		Filter: filters.NumberNotEquals(0),
+	}))
+}
+
 func TestMatchExpression(t *testing.T) {
 	assert := assert.New(t)
 	e := test.Test_Type(42)
