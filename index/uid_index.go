@@ -1,6 +1,7 @@
 package index
 
 import (
+	"container/heap"
 	"context"
 	"iter"
 	"sort"
@@ -348,16 +349,10 @@ func (i *uidIndex) Find(ctx context.Context, t protoreflect.FullName, f filters.
 			return
 		}
 
-		uids := make([]uint64, 0, b.Cardinality())
-		for uid := range b.Iter() {
-			uids = append(uids, uid)
-		}
-		sort.Slice(uids, func(a, b int) bool { return uids[a] < uids[b] })
-
-		var emitted uint64
 		if !opts.Reverse {
 			var skipped uint64
-			for _, uid := range uids {
+			var emitted uint64
+			for uid := range b.Iter() {
 				if skipped < opts.Offset {
 					skipped++
 					continue
@@ -373,6 +368,8 @@ func (i *uidIndex) Find(ctx context.Context, t protoreflect.FullName, f filters.
 			return
 		}
 
+		uids := collectOrderedUIDs(b, opts)
+		var emitted uint64
 		var skipped uint64
 		for idx := len(uids) - 1; idx >= 0; idx-- {
 			if skipped < opts.Offset {
@@ -388,4 +385,82 @@ func (i *uidIndex) Find(ctx context.Context, t protoreflect.FullName, f filters.
 			}
 		}
 	}
+}
+
+func collectOrderedUIDs(b bitmap.Bitmap, opts FindOptions) []uint64 {
+	if opts.Limit > 0 {
+		k := opts.Offset + opts.Limit
+		if k > 0 {
+			if opts.Reverse {
+				h := make(minHeap, 0, k)
+				for uid := range b.Iter() {
+					if uint64(h.Len()) < k {
+						heap.Push(&h, uid)
+						continue
+					}
+					if uid <= h[0] {
+						continue
+					}
+					h[0] = uid
+					heap.Fix(&h, 0)
+				}
+				uids := make([]uint64, len(h))
+				copy(uids, h)
+				sort.Slice(uids, func(a, b int) bool { return uids[a] < uids[b] })
+				return uids
+			}
+
+			h := make(maxHeap, 0, k)
+			for uid := range b.Iter() {
+				if uint64(h.Len()) < k {
+					heap.Push(&h, uid)
+					continue
+				}
+				if uid >= h[0] {
+					continue
+				}
+				h[0] = uid
+				heap.Fix(&h, 0)
+			}
+			uids := make([]uint64, len(h))
+			copy(uids, h)
+			sort.Slice(uids, func(a, b int) bool { return uids[a] < uids[b] })
+			return uids
+		}
+	}
+
+	uids := make([]uint64, 0, b.Cardinality())
+	for uid := range b.Iter() {
+		uids = append(uids, uid)
+	}
+	sort.Slice(uids, func(a, b int) bool { return uids[a] < uids[b] })
+	return uids
+}
+
+type minHeap []uint64
+
+func (h minHeap) Len() int           { return len(h) }
+func (h minHeap) Less(i, j int) bool { return h[i] < h[j] }
+func (h minHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *minHeap) Push(x any)        { *h = append(*h, x.(uint64)) }
+func (h *minHeap) Pop() any {
+	old := *h
+	n := len(old)
+	v := old[n-1]
+	*h = old[:n-1]
+	return v
+}
+
+type maxHeap []uint64
+
+func (h maxHeap) Len() int           { return len(h) }
+func (h maxHeap) Less(i, j int) bool { return h[i] > h[j] }
+func (h maxHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *maxHeap) Push(x any)        { *h = append(*h, x.(uint64)) }
+func (h *maxHeap) Pop() any {
+	old := *h
+	n := len(old)
+	v := old[n-1]
+	*h = old[:n-1]
+	return v
 }

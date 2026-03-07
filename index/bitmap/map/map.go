@@ -19,6 +19,7 @@ package simplemap
 import (
 	"encoding/binary"
 	"iter"
+	"sort"
 
 	bitmap2 "go.linka.cloud/protofilters/index/bitmap"
 )
@@ -102,6 +103,7 @@ func (b *bitmap) Iter() iter.Seq[uint64] {
 	for k := range b.m {
 		keys = append(keys, k)
 	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 	return func(yield func(uint64) bool) {
 		for _, k := range keys {
 			if !yield(k) {

@@ -57,6 +57,7 @@ type Bitmap interface {
 	Contains(k uint64) bool
 	Cardinality() uint64
 	Bytes() []byte
+	// Iter returns UIDs in ascending order.
 	Iter() iter.Seq[uint64]
 }
 

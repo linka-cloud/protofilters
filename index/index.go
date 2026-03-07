@@ -52,7 +52,10 @@ func New(s Store, fn Func) Index {
 		fn = All
 	}
 	if s == nil {
-		s = newStore()
+		return &keyIndex{
+			uid:      NewUID(nil, fn),
+			resolver: newUIDKeys(),
+		}
 	}
 	x, ok := any(s).(Txer)
 	if !ok {
@@ -149,11 +152,15 @@ func (i *keyIndex) Remove(ctx context.Context, k string) error {
 }
 
 func (i *keyIndex) Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, []string, error) {
-	tx, err := i.store.Tx(ctx)
-	if err != nil {
-		return nil, nil, err
+	var tx Tx
+	if i.store != nil {
+		var err error
+		tx, err = i.store.Tx(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer tx.Close()
 	}
-	defer tx.Close()
 
 	var keys []string
 	var collisions []string
@@ -161,12 +168,23 @@ func (i *keyIndex) Find(ctx context.Context, t protoreflect.FullName, f filters.
 		if err != nil {
 			return nil, nil, err
 		}
-		resolved := i.resolver.keys(uid)
+		single, many := i.resolver.oneOrMany(uid)
+		if tx == nil {
+			if many != nil {
+				collisions = append(collisions, many...)
+				continue
+			}
+			if single != "" {
+				keys = append(keys, single)
+			}
+			continue
+		}
+
 		extra, err := tx.Keys(ctx, uid)
 		if err != nil {
 			return nil, nil, err
 		}
-		resolved = mergeResolvedKeys(uid, resolved, extra)
+		resolved := mergeResolvedKeys(uid, single, many, extra)
 		if len(resolved) != 1 {
 			collisions = append(collisions, resolved...)
 			continue
@@ -176,9 +194,22 @@ func (i *keyIndex) Find(ctx context.Context, t protoreflect.FullName, f filters.
 	return keys, collisions, nil
 }
 
-func mergeResolvedKeys(uid uint64, resolved, extra []string) []string {
-	m := make(map[string]struct{}, len(resolved)+len(extra))
-	for _, v := range resolved {
+func mergeResolvedKeys(uid uint64, single string, many, extra []string) []string {
+	if len(extra) == 0 {
+		if many != nil {
+			return many
+		}
+		if single == "" {
+			return nil
+		}
+		return []string{single}
+	}
+
+	m := make(map[string]struct{}, 1+len(many)+len(extra))
+	if single != "" {
+		m[single] = struct{}{}
+	}
+	for _, v := range many {
 		m[v] = struct{}{}
 	}
 	uidPlaceholder := strconv.FormatUint(uid, 10)
@@ -194,6 +225,26 @@ func mergeResolvedKeys(uid uint64, resolved, extra []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func (r *uidKeys) oneOrMany(uid uint64) (string, []string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	keys := r.uidKeys[uid]
+	if len(keys) == 0 {
+		return "", nil
+	}
+	if len(keys) == 1 {
+		for k := range keys {
+			return k, nil
+		}
+	}
+	out := make([]string, 0, len(keys))
+	for k := range keys {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return "", out
 }
 
 type fieldValues struct {
