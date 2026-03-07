@@ -79,6 +79,10 @@ func (f *field) add(k string) uint64 {
 	return h
 }
 
+func (f *field) addUID(uid uint64) {
+	f.bitmap.Set(uid)
+}
+
 func (f *field) remove(k string) {
 	if i, err := strconv.ParseUint(k, 10, 64); err == nil {
 		f.bitmap.Remove(i)
@@ -86,4 +90,8 @@ func (f *field) remove(k string) {
 	}
 	h := xxhash.Sum64String(k)
 	f.bitmap.Remove(h)
+}
+
+func (f *field) removeUID(uid uint64) {
+	f.bitmap.Remove(uid)
 }

@@ -19,6 +19,7 @@ package index
 import (
 	"context"
 	"iter"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -43,6 +44,18 @@ type Tx interface {
 	Close() error
 }
 
+// UIDTxer is an interface for UID transactions.
+type UIDTxer interface {
+	Tx(ctx context.Context) (UIDTx, error)
+}
+
+// UIDTx is an interface for a UID transaction.
+type UIDTx interface {
+	UIDStore
+	Commit(ctx context.Context) error
+	Close() error
+}
+
 // Store is an interface for storing and retrieving protobuf message fields.
 type Store interface {
 	// For returns a FieldReader for the given message type.
@@ -56,6 +69,18 @@ type Store interface {
 	Keys(ctx context.Context, i uint64) ([]string, error)
 	// Clear removes all values from the store for the given key.
 	Clear(ctx context.Context, k string) error
+}
+
+// UIDStore is an interface for storing and retrieving protobuf message fields by UID.
+type UIDStore interface {
+	// For returns a FieldReader for the given message type.
+	For(ctx context.Context, t protoreflect.FullName) (FieldReader, error)
+	// AddUID adds a value to the store for the given UID and field descriptor.
+	AddUID(ctx context.Context, uid uint64, v protoreflect.Value, fds ...protoreflect.FieldDescriptor) error
+	// RemoveUID removes a value from the store for the given UID and field descriptor.
+	RemoveUID(ctx context.Context, uid uint64, f protoreflect.FieldDescriptor, v protoreflect.Value) error
+	// ClearUID removes all values from the store for the given UID.
+	ClearUID(ctx context.Context, uid uint64) error
 }
 
 type fakeTxer struct {
@@ -75,6 +100,26 @@ func (n noopTX) Commit(_ context.Context) error {
 }
 
 func (n noopTX) Close() error {
+	return nil
+}
+
+type fakeUIDTxer struct {
+	UIDStore
+}
+
+func (f fakeUIDTxer) Tx(_ context.Context) (UIDTx, error) {
+	return noopUIDTx{UIDStore: f.UIDStore}, nil
+}
+
+type noopUIDTx struct {
+	UIDStore
+}
+
+func (n noopUIDTx) Commit(_ context.Context) error {
+	return nil
+}
+
+func (n noopUIDTx) Close() error {
 	return nil
 }
 
@@ -100,11 +145,50 @@ func newStore() Store {
 	}
 }
 
+func newUIDStore() UIDStore {
+	return &uidStore{
+		fields: make(map[protoreflect.FullName][]*field),
+	}
+}
+
 type store struct {
 	fields   map[protoreflect.FullName][]*field
 	hashKeys map[uint64][]string
 	keyHash  map[string]uint64
 	m        sync.RWMutex
+}
+
+type uidStore struct {
+	fields map[protoreflect.FullName][]*field
+	m      sync.RWMutex
+}
+
+type uidTxer struct {
+	Txer
+}
+
+func (l uidTxer) Tx(ctx context.Context) (UIDTx, error) {
+	tx, err := l.Txer.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return uidTx{Tx: tx}, nil
+}
+
+type uidTx struct {
+	Tx
+}
+
+func (l uidTx) AddUID(ctx context.Context, uid uint64, v protoreflect.Value, fds ...protoreflect.FieldDescriptor) error {
+	return l.Tx.Add(ctx, strconv.FormatUint(uid, 10), v, fds...)
+}
+
+func (l uidTx) RemoveUID(ctx context.Context, uid uint64, f protoreflect.FieldDescriptor, v protoreflect.Value) error {
+	return l.Tx.Remove(ctx, strconv.FormatUint(uid, 10), f, v)
+}
+
+func (l uidTx) ClearUID(ctx context.Context, uid uint64) error {
+	return l.Tx.Clear(ctx, strconv.FormatUint(uid, 10))
 }
 
 func (s *store) Keys(_ context.Context, i uint64) ([]string, error) {
@@ -191,6 +275,69 @@ func (s *store) Clear(_ context.Context, k string) error {
 	for _, fis := range s.fields {
 		for _, fi := range fis {
 			fi.remove(k)
+		}
+	}
+	return nil
+}
+
+func (s *uidStore) For(_ context.Context, t protoreflect.FullName) (FieldReader, error) {
+	s.m.RLock()
+	defer s.m.RUnlock()
+	out := make(map[protoreflect.Name][]*field)
+	for k, v := range s.fields {
+		if strings.HasPrefix(string(k), string(t)) {
+			out[protoreflect.Name(k[len(t)+1:])] = v
+		}
+	}
+	return &fieldReader{m: out}, nil
+}
+
+func (s *uidStore) AddUID(_ context.Context, uid uint64, v protoreflect.Value, fds ...protoreflect.FieldDescriptor) error {
+	s.m.Lock()
+	defer s.m.Unlock()
+	if len(fds) == 0 {
+		return nil
+	}
+	n := fds[0].FullName()
+	for _, v := range fds[1:] {
+		n = n.Append(v.Name())
+	}
+	if _, ok := s.fields[n]; !ok {
+		s.fields[n] = make([]*field, 0)
+	}
+	for _, fi := range s.fields[n] {
+		if fi.value.Interface() == v.Interface() {
+			fi.addUID(uid)
+			return nil
+		}
+	}
+	fi := newField(v, fds)
+	fi.addUID(uid)
+	s.fields[n] = append(s.fields[n], fi)
+	return nil
+}
+
+func (s *uidStore) RemoveUID(_ context.Context, uid uint64, f protoreflect.FieldDescriptor, v protoreflect.Value) error {
+	s.m.Lock()
+	defer s.m.Unlock()
+	if _, ok := s.fields[f.FullName()]; !ok {
+		return nil
+	}
+	for _, fi := range s.fields[f.FullName()] {
+		if fi.value.Interface() == v.Interface() {
+			fi.removeUID(uid)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (s *uidStore) ClearUID(_ context.Context, uid uint64) error {
+	s.m.Lock()
+	defer s.m.Unlock()
+	for _, fis := range s.fields {
+		for _, fi := range fis {
+			fi.removeUID(uid)
 		}
 	}
 	return nil

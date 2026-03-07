@@ -19,53 +19,34 @@ package index
 import (
 	"context"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/cespare/xxhash/v2"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"go.linka.cloud/protofilters/filters"
-	"go.linka.cloud/protofilters/index/bitmap"
-	preflect "go.linka.cloud/protofilters/reflect"
 )
-
-var tracer = otel.Tracer("go.linka.cloud/protofilters/index")
 
 func All(_ context.Context, _ protoreflect.FullName, _ ...protoreflect.FieldDescriptor) (bool, error) {
 	return true, nil
 }
 
-// Func is a function that is called to determine if a field should be indexed
-// It takes a context and a list of field descriptors that represent the path to the field
-// It returns a bool indicating if the field should be indexed or not and an error if any
+// Func is a function that is called to determine if a field should be indexed.
 type Func func(ctx context.Context, name protoreflect.FullName, fds ...protoreflect.FieldDescriptor) (bool, error)
 
-// Index is a protobuf message index
+// Index is a protobuf message index.
 type Index interface {
-	// Insert inserts and indexes the given message with the given key
 	Insert(ctx context.Context, k string, m proto.Message) error
-	// Update updates the index for the given key using old and new messages
 	Update(ctx context.Context, k string, old, m proto.Message) error
-	// Remove removes the given key from the index
 	Remove(ctx context.Context, k string) error
-	// Find returns the keys of the messages that match the given FieldFilterer
-	// It returns the keys that match the filter and the keys that have hash collisions
-	// They need to be resolved by checking the actual values
 	Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, []string, error)
 }
 
-type index struct {
-	store Txer
-	fn    Func
-}
-
-// New creates a new index using the given store and index function
-// If the store is nil, a new in-memory store is created
-// If the index function is nil, all fields are indexed
+// New creates a compatibility key-based index backed by the UID index implementation.
 func New(s Store, fn Func) Index {
 	if fn == nil {
 		fn = All
@@ -77,210 +58,147 @@ func New(s Store, fn Func) Index {
 	if !ok {
 		x = &fakeTxer{Store: s}
 	}
-	return &index{
-		store: x,
-		fn:    fn,
+	return &keyIndex{
+		uid:      newUIDFromTxer(uidTxer{Txer: x}, fn),
+		store:    x,
+		resolver: newUIDKeys(),
 	}
 }
 
-func (i *index) index(ctx context.Context, tx Tx, k string, m protoreflect.Message, fds ...protoreflect.FieldDescriptor) error {
-	ctx, span := tracer.Start(ctx, "index.index")
-	defer span.End()
-	span.SetAttributes(
-		attribute.String("index.type", string(m.Descriptor().FullName())),
-		attribute.Int("index.depth", len(fds)),
-	)
-	if len(fds) > 0 {
-		span.SetAttributes(attribute.String("index.field", string(joinFieldNames(fds))))
+type keyIndex struct {
+	uid      UIDIndex
+	store    Txer
+	resolver *uidKeys
+}
+
+type uidKeys struct {
+	mu      sync.RWMutex
+	uidKeys map[uint64]map[string]struct{}
+	keyUID  map[string]uint64
+}
+
+func newUIDKeys() *uidKeys {
+	return &uidKeys{
+		uidKeys: make(map[uint64]map[string]struct{}),
+		keyUID:  make(map[string]uint64),
 	}
-	f := m.Descriptor().Fields()
-	name := m.Descriptor().FullName()
-	if len(fds) > 0 {
-		_ = fds
+}
+
+func (r *uidKeys) add(key string, uid uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.keyUID[key] = uid
+	if _, ok := r.uidKeys[uid]; !ok {
+		r.uidKeys[uid] = make(map[string]struct{})
 	}
-	for j := 0; j < f.Len(); j++ {
-		fd := f.Get(j)
-		fds := append(fds, fd)
-		ok, err := i.fn(ctx, name, fds...)
-		if err != nil {
-			return err
-		}
-		if isUnsetRealOneofField(m, fd) {
-			continue
-		}
-		rval := m.Get(fd)
-		if fd.IsList() {
-			// we don't index lists of messages
-			if fd.Kind() == protoreflect.MessageKind {
-				for j2 := 0; j2 < rval.List().Len(); j2++ {
-					m := rval.List().Get(j2).Message()
-					if err := i.index(ctx, tx, k, m, fds...); err != nil {
-						return err
-					}
-				}
-				continue
-			}
-			list := rval.List()
-			for j2 := 0; j2 < list.Len(); j2++ {
-				if err := tx.Add(ctx, k, list.Get(j2), fds...); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-		if fd.IsMap() {
-			continue
-		}
-		if fd.Kind() == protoreflect.MessageKind && !preflect.IsWKType(fd.Message().FullName()) {
-			if !rval.Message().IsValid() {
-				continue
-			}
-			if err := i.index(ctx, tx, k, rval.Message(), fds...); err != nil {
-				return err
-			}
-			continue
-		}
-		if fd.HasOptionalKeyword() && !m.Has(fd) {
-			rval = protoreflect.Value{}
-		}
-		if !ok {
-			continue
-		}
-		if err := tx.Add(ctx, k, rval, fds...); err != nil {
-			return err
-		}
+	r.uidKeys[uid][key] = struct{}{}
+}
+
+func (r *uidKeys) remove(key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	uid, ok := r.keyUID[key]
+	if !ok {
+		return
 	}
+	delete(r.keyUID, key)
+	keys := r.uidKeys[uid]
+	delete(keys, key)
+	if len(keys) == 0 {
+		delete(r.uidKeys, uid)
+	}
+}
+
+func (r *uidKeys) keys(uid uint64) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	keys := r.uidKeys[uid]
+	out := make([]string, 0, len(keys))
+	for k := range keys {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (i *keyIndex) Insert(ctx context.Context, k string, m proto.Message) error {
+	uid := keyHash(k)
+	if err := i.uid.Insert(ctx, uid, m); err != nil {
+		return err
+	}
+	i.resolver.add(k, uid)
 	return nil
 }
 
-// Insert indexes message fields with the given key.
-func (i *index) Insert(ctx context.Context, k string, m proto.Message) error {
-	ctx, span := tracer.Start(ctx, "index.Insert")
-	defer span.End()
-	if m != nil {
-		span.SetAttributes(attribute.String("index.type", string(m.ProtoReflect().Descriptor().FullName())))
-	}
-	tx, err := i.store.Tx(ctx)
-	if err != nil {
+func (i *keyIndex) Update(ctx context.Context, k string, old, m proto.Message) error {
+	uid := keyHash(k)
+	if err := i.uid.Update(ctx, uid, old, m); err != nil {
 		return err
 	}
-	defer tx.Close()
-	if err := i.index(ctx, tx, k, m.ProtoReflect()); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	i.resolver.add(k, uid)
+	return nil
 }
 
-func (i *index) Update(ctx context.Context, k string, old, m proto.Message) error {
-	ctx, span := tracer.Start(ctx, "index.Update")
-	defer span.End()
-	if m != nil {
-		span.SetAttributes(attribute.String("index.type", string(m.ProtoReflect().Descriptor().FullName())))
-	}
-	span.SetAttributes(
-		attribute.Bool("index.has_old", old != nil),
-		attribute.Bool("index.has_new", m != nil),
-	)
-	tx, err := i.store.Tx(ctx)
-	if err != nil {
+func (i *keyIndex) Remove(ctx context.Context, k string) error {
+	uid := keyHash(k)
+	if err := i.uid.Remove(ctx, uid); err != nil {
 		return err
 	}
+	i.resolver.remove(k)
+	return nil
+}
+
+func (i *keyIndex) Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, []string, error) {
+	tx, err := i.store.Tx(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	defer tx.Close()
-	oldValues := map[string]fieldValues{}
-	newValues := map[string]fieldValues{}
-	if old != nil {
-		if oldValues, err = i.collectValues(ctx, old.ProtoReflect()); err != nil {
-			return err
-		}
-	}
-	if m != nil {
-		if newValues, err = i.collectValues(ctx, m.ProtoReflect()); err != nil {
-			return err
-		}
-	}
-	if len(oldValues) > 0 {
-		fr, err := tx.For(ctx, old.ProtoReflect().Descriptor().FullName())
+
+	var keys []string
+	var collisions []string
+	for uid, err := range i.uid.Find(ctx, t, f, FindOptions{}) {
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
-		if err := applyDiff(ctx, fr, tx, k, oldValues, newValues); err != nil {
-			return err
+		resolved := i.resolver.keys(uid)
+		extra, err := tx.Keys(ctx, uid)
+		if err != nil {
+			return nil, nil, err
 		}
-	} else {
-		for _, fv := range newValues {
-			for _, v := range fv.values {
-				if err := tx.Add(ctx, k, v, fv.fds...); err != nil {
-					return err
-				}
-			}
+		resolved = mergeResolvedKeys(uid, resolved, extra)
+		if len(resolved) != 1 {
+			collisions = append(collisions, resolved...)
+			continue
 		}
+		keys = append(keys, resolved...)
 	}
-	return tx.Commit(ctx)
+	return keys, collisions, nil
+}
+
+func mergeResolvedKeys(uid uint64, resolved, extra []string) []string {
+	m := make(map[string]struct{}, len(resolved)+len(extra))
+	for _, v := range resolved {
+		m[v] = struct{}{}
+	}
+	uidPlaceholder := strconv.FormatUint(uid, 10)
+	for _, v := range extra {
+		if v == uidPlaceholder {
+			continue
+		}
+		m[v] = struct{}{}
+	}
+	out := make([]string, 0, len(m))
+	for v := range m {
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
 }
 
 type fieldValues struct {
 	fds    []protoreflect.FieldDescriptor
 	values []protoreflect.Value
-}
-
-func (i *index) collectValues(ctx context.Context, m protoreflect.Message) (map[string]fieldValues, error) {
-	values := map[string]fieldValues{}
-	if err := i.collectValuesInto(ctx, values, m); err != nil {
-		return nil, err
-	}
-	return values, nil
-}
-
-func (i *index) collectValuesInto(ctx context.Context, out map[string]fieldValues, m protoreflect.Message, fds ...protoreflect.FieldDescriptor) error {
-	f := m.Descriptor().Fields()
-	name := m.Descriptor().FullName()
-	for j := 0; j < f.Len(); j++ {
-		fd := f.Get(j)
-		path := append(fds, fd)
-		ok, err := i.fn(ctx, name, path...)
-		if err != nil {
-			return err
-		}
-		if isUnsetRealOneofField(m, fd) {
-			continue
-		}
-		rval := m.Get(fd)
-		if fd.IsList() {
-			if fd.Kind() == protoreflect.MessageKind {
-				for j2 := 0; j2 < rval.List().Len(); j2++ {
-					if err := i.collectValuesInto(ctx, out, rval.List().Get(j2).Message(), path...); err != nil {
-						return err
-					}
-				}
-				continue
-			}
-			list := rval.List()
-			for j2 := 0; j2 < list.Len(); j2++ {
-				out = appendValue(out, path, list.Get(j2))
-			}
-			continue
-		}
-		if fd.IsMap() {
-			continue
-		}
-		if fd.Kind() == protoreflect.MessageKind && !preflect.IsWKType(fd.Message().FullName()) {
-			if !rval.Message().IsValid() {
-				continue
-			}
-			if err := i.collectValuesInto(ctx, out, rval.Message(), path...); err != nil {
-				return err
-			}
-			continue
-		}
-		if fd.HasOptionalKeyword() && !m.Has(fd) {
-			rval = protoreflect.Value{}
-		}
-		if !ok {
-			continue
-		}
-		out = appendValue(out, path, rval)
-	}
-	return nil
 }
 
 func appendValue(out map[string]fieldValues, fds []protoreflect.FieldDescriptor, v protoreflect.Value) map[string]fieldValues {
@@ -308,32 +226,6 @@ func isUnsetRealOneofField(m protoreflect.Message, fd protoreflect.FieldDescript
 	return !m.Has(fd)
 }
 
-func applyDiff(ctx context.Context, fr FieldReader, tx Tx, k string, oldValues, newValues map[string]fieldValues) error {
-	seen := map[string]struct{}{}
-	for key := range oldValues {
-		seen[key] = struct{}{}
-	}
-	for key := range newValues {
-		seen[key] = struct{}{}
-	}
-	for key := range seen {
-		ov := oldValues[key]
-		nv := newValues[key]
-		remove, add := diffValues(ov.values, nv.values)
-		for _, v := range remove {
-			if err := removeValue(ctx, fr, k, v, ov.fds...); err != nil {
-				return err
-			}
-		}
-		for _, v := range add {
-			if err := tx.Add(ctx, k, v, nv.fds...); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func diffValues(oldValues, newValues []protoreflect.Value) (remove []protoreflect.Value, add []protoreflect.Value) {
 	used := make([]bool, len(newValues))
 	for _, ov := range oldValues {
@@ -358,29 +250,6 @@ func diffValues(oldValues, newValues []protoreflect.Value) (remove []protoreflec
 		}
 	}
 	return remove, add
-}
-
-func removeValue(ctx context.Context, fr FieldReader, k string, v protoreflect.Value, fds ...protoreflect.FieldDescriptor) error {
-	if len(fds) == 0 {
-		return nil
-	}
-	name := joinFieldNames(fds)
-	h := keyHash(k)
-	for f, err := range fr.Get(ctx, name) {
-		if err != nil {
-			return err
-		}
-		if !valueEqual(f.Value(), v) {
-			continue
-		}
-		b, err := f.Bitmap(ctx)
-		if err != nil {
-			return err
-		}
-		b.Remove(h)
-		return nil
-	}
-	return nil
 }
 
 func joinFieldNames(fds []protoreflect.FieldDescriptor) protoreflect.Name {
@@ -416,105 +285,4 @@ func keyHash(k string) uint64 {
 		return i
 	}
 	return xxhash.Sum64String(k)
-}
-
-func (i *index) Remove(ctx context.Context, k string) error {
-	ctx, span := tracer.Start(ctx, "index.Remove")
-	defer span.End()
-	tx, err := i.store.Tx(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Close()
-	if err := tx.Clear(ctx, k); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
-func (i *index) doFind(ctx context.Context, tx Tx, t protoreflect.FullName, f *filters.FieldFilter) (bitmap.Bitmap, error) {
-	fds, err := tx.For(ctx, t)
-	if err != nil {
-		return nil, err
-	}
-
-	b := bitmap.NewWith(1024)
-	for v, err := range fds.Get(ctx, protoreflect.Name(f.Field)) {
-		if err != nil {
-			return nil, err
-		}
-		ds := v.Descriptors()
-		fd := ds[len(ds)-1]
-		ok, err := preflect.Match(v.Value(), fd, f.Filter)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		b2, err := v.Bitmap(ctx)
-		if err != nil {
-			return nil, err
-		}
-		b.Or(b2)
-	}
-	return b, nil
-}
-
-func (i *index) find(ctx context.Context, tx Tx, t protoreflect.FullName, f filters.FieldFilterer) (bitmap.Bitmap, error) {
-	expr := f.Expr()
-	b, err := i.doFind(ctx, tx, t, expr.Condition)
-	if err != nil {
-		return nil, err
-	}
-	for _, v := range expr.AndExprs {
-		b2, err := i.find(ctx, tx, t, v)
-		if err != nil {
-			return nil, err
-		}
-		b.And(b2)
-	}
-	for _, v := range expr.OrExprs {
-		b2, err := i.find(ctx, tx, t, v)
-		if err != nil {
-			return nil, err
-		}
-		b.Or(b2)
-	}
-	return b, nil
-}
-
-func (i *index) Find(ctx context.Context, t protoreflect.FullName, f filters.FieldFilterer) ([]string, []string, error) {
-	ctx, span := tracer.Start(ctx, "index.Find")
-	defer span.End()
-	span.SetAttributes(attribute.String("index.type", string(t)))
-	if f == nil || f.Expr() == nil {
-		return nil, nil, nil
-	}
-	if expr := f.Expr(); expr != nil {
-		span.SetAttributes(attribute.String("index.filter", expr.Format()))
-	}
-	tx, err := i.store.Tx(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer tx.Close()
-	b, err := i.find(ctx, tx, t, f)
-	if err != nil {
-		return nil, nil, err
-	}
-	var keys []string
-	var collisions []string
-	for v := range b.Iter() {
-		ks, err := tx.Keys(ctx, v)
-		if err != nil {
-			return nil, nil, err
-		}
-		if len(ks) != 1 {
-			collisions = append(collisions, ks...)
-			continue
-		}
-		keys = append(keys, ks...)
-	}
-	return keys, collisions, nil
 }

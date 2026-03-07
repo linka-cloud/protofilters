@@ -18,6 +18,7 @@ package index
 
 import (
 	"context"
+	"iter"
 	"slices"
 	"sort"
 	"strconv"
@@ -821,6 +822,90 @@ func TestFuncFilterSkipsFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, collisions)
 	assert.Empty(t, keys)
+}
+
+func TestUIDIndexFindOptions(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ui := NewUID(nil, All)
+	for _, id := range []uint64{10, 2, 30, 4, 5} {
+		require.NoError(t, ui.Insert(ctx, id, &test.Test{StringField: "value"}))
+	}
+
+	filter := filters.Where("string_field").StringEquals("value")
+
+	var asc []uint64
+	for uid, err := range ui.Find(ctx, "linka.cloud.test.Test", filter, FindOptions{}) {
+		require.NoError(t, err)
+		asc = append(asc, uid)
+	}
+	assert.Equal(t, []uint64{2, 4, 5, 10, 30}, asc)
+
+	var paged []uint64
+	for uid, err := range ui.Find(ctx, "linka.cloud.test.Test", filter, FindOptions{Offset: 1, Limit: 2}) {
+		require.NoError(t, err)
+		paged = append(paged, uid)
+	}
+	assert.Equal(t, []uint64{4, 5}, paged)
+
+	var reversed []uint64
+	for uid, err := range ui.Find(ctx, "linka.cloud.test.Test", filter, FindOptions{Reverse: true, Offset: 1, Limit: 2}) {
+		require.NoError(t, err)
+		reversed = append(reversed, uid)
+	}
+	assert.Equal(t, []uint64{10, 5}, reversed)
+}
+
+func TestUIDIndexUpdateAndRemove(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ui := NewUID(nil, All)
+	require.NoError(t, ui.Insert(ctx, 42, &test.Test{StringField: "one"}))
+
+	uids, err := collectUIDs(ui.Find(ctx, "linka.cloud.test.Test", filters.Where("string_field").StringEquals("one"), FindOptions{}))
+	require.NoError(t, err)
+	assert.Equal(t, []uint64{42}, uids)
+
+	require.NoError(t, ui.Update(ctx, 42, &test.Test{StringField: "one"}, &test.Test{StringField: "two"}))
+
+	uids, err = collectUIDs(ui.Find(ctx, "linka.cloud.test.Test", filters.Where("string_field").StringEquals("one"), FindOptions{}))
+	require.NoError(t, err)
+	assert.Empty(t, uids)
+
+	uids, err = collectUIDs(ui.Find(ctx, "linka.cloud.test.Test", filters.Where("string_field").StringEquals("two"), FindOptions{}))
+	require.NoError(t, err)
+	assert.Equal(t, []uint64{42}, uids)
+
+	require.NoError(t, ui.Remove(ctx, 42))
+
+	uids, err = collectUIDs(ui.Find(ctx, "linka.cloud.test.Test", filters.Where("string_field").StringEquals("two"), FindOptions{}))
+	require.NoError(t, err)
+	assert.Empty(t, uids)
+}
+
+func TestUIDIndexFindEmptyFilter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ui := NewUID(nil, All)
+	require.NoError(t, ui.Insert(ctx, 1, &test.Test{StringField: "value"}))
+
+	uids, err := collectUIDs(ui.Find(ctx, "linka.cloud.test.Test", nil, FindOptions{}))
+	require.NoError(t, err)
+	assert.Empty(t, uids)
+}
+
+func collectUIDs(seq iter.Seq2[uint64, error]) ([]uint64, error) {
+	var out []uint64
+	for uid, err := range seq {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, uid)
+	}
+	return out, nil
 }
 
 type collisionStore struct {
