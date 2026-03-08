@@ -18,11 +18,10 @@ package reflect
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
-	"google.golang.org/protobuf/proto"
 	pref "google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.linka.cloud/protofilters/filters"
 )
@@ -91,7 +90,9 @@ func Match(val pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, er
 }
 
 func matchString(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
-	var value *string
+	var value string
+	hasValue := true
+	valueSet := false
 	if fd.Kind() != pref.StringKind && fd.Kind() != pref.EnumKind {
 		if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != StringValue {
 			return false, fmt.Errorf("cannot use string filter on %s", fd.Kind().String())
@@ -100,75 +101,79 @@ func matchString(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (b
 		if !rval.IsValid() {
 			return checkNot(f, false, nil)
 		}
-		value = proto.String(rval.Message().Get(fd.Message().Fields().Get(0)).String())
+		value = rval.Message().Get(fd.Message().Fields().Get(0)).String()
+		valueSet = true
 	}
 	if fd.Kind() == pref.EnumKind {
 		e := fd.Enum().Values().ByNumber(rval.Enum())
 		if e == nil {
 			return false, nil
 		}
-		value = proto.String(string(e.Name()))
-	} else if value == nil {
-		value = proto.String(rval.String())
+		value = string(e.Name())
+		valueSet = true
+	} else if !valueSet {
+		value = rval.String()
+		if !rval.IsValid() {
+			hasValue = false
+		}
 	}
-	match, err := f.GetString_().Match(value)
+	match, err := matchStringFilter(f.GetString_(), value, hasValue)
 	return checkNot(f, match, err)
 }
 
 func matchNumber(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
 	// fast path for float64
 	if val, ok := rval.Interface().(float64); ok {
-		match, err := f.GetNumber().Match(&val)
+		match, err := matchNumberFilter(f.GetNumber(), val, true)
 		return checkNot(f, match, err)
 	}
-	var val *float64
+	var val float64
+	hasValue := true
 	if !rval.IsValid() {
-		if fd.HasOptionalKeyword() {
-			match, err := f.GetNumber().Match(nil)
-			return checkNot(f, match, err)
+		if !fd.HasOptionalKeyword() {
+			return false, fmt.Errorf("cannot use number filter on %s", fd.Kind().String())
 		}
-		return false, fmt.Errorf("cannot use number filter on %s", fd.Kind().String())
+		hasValue = false
 	}
-	switch fd.Kind() {
-	case pref.Int32Kind,
-		pref.Sint32Kind,
-		pref.Int64Kind,
-		pref.Sint64Kind,
-		pref.Sfixed32Kind,
-		pref.Fixed32Kind,
-		pref.Sfixed64Kind,
-		pref.Fixed64Kind:
-		val = proto.Float64(float64(rval.Int()))
-	case pref.Uint32Kind, pref.Uint64Kind:
-		val = proto.Float64(float64(rval.Uint()))
-	case pref.FloatKind, pref.DoubleKind:
-		val = proto.Float64(rval.Float())
-	case pref.EnumKind:
-		val = proto.Float64(float64(rval.Enum()))
-	case pref.MessageKind:
-		if rval.IsValid() {
+	if hasValue {
+		switch fd.Kind() {
+		case pref.Int32Kind,
+			pref.Sint32Kind,
+			pref.Int64Kind,
+			pref.Sint64Kind,
+			pref.Sfixed32Kind,
+			pref.Fixed32Kind,
+			pref.Sfixed64Kind,
+			pref.Fixed64Kind:
+			val = float64(rval.Int())
+		case pref.Uint32Kind, pref.Uint64Kind:
+			val = float64(rval.Uint())
+		case pref.FloatKind, pref.DoubleKind:
+			val = rval.Float()
+		case pref.EnumKind:
+			val = float64(rval.Enum())
+		case pref.MessageKind:
 			switch WKType(fd.Message().FullName()) {
 			case DoubleValue, FloatValue:
-				val = proto.Float64(rval.Message().Get(fd.Message().Fields().Get(0)).Float())
+				val = rval.Message().Get(fd.Message().Fields().Get(0)).Float()
 			case Int64Value, Int32Value:
-				val = proto.Float64(float64(rval.Message().Get(fd.Message().Fields().Get(0)).Int()))
+				val = float64(rval.Message().Get(fd.Message().Fields().Get(0)).Int())
 			case UInt64Value, UInt32Value:
-				val = proto.Float64(float64(rval.Message().Get(fd.Message().Fields().Get(0)).Uint()))
+				val = float64(rval.Message().Get(fd.Message().Fields().Get(0)).Uint())
 			default:
 				return false, fmt.Errorf("cannot use number filter on %s", fd.Kind().String())
 			}
-		} else {
-			val = nil
+		default:
+			return false, fmt.Errorf("cannot use number filter on %s", fd.Kind().String())
 		}
-	default:
-		return false, fmt.Errorf("cannot use number filter on %s", fd.Kind().String())
 	}
-	match, err := f.GetNumber().Match(val)
+	match, err := matchNumberFilter(f.GetNumber(), val, hasValue)
 	return checkNot(f, match, err)
 }
 
 func matchBool(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (bool, error) {
-	var val *bool
+	var val bool
+	hasValue := true
 	if fd.Kind() != pref.BoolKind {
 		if fd.Kind() != pref.MessageKind || WKType(fd.Message().FullName()) != BoolValue {
 			return false, fmt.Errorf("cannot use bool filter on %s", fd.Kind().String())
@@ -177,11 +182,13 @@ func matchBool(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (boo
 		if !rval.IsValid() {
 			return checkNot(f, false, nil)
 		}
-		val = proto.Bool(rval.Message().Get(fd.Message().Fields().Get(0)).Bool())
+		val = rval.Message().Get(fd.Message().Fields().Get(0)).Bool()
 	} else if !fd.HasOptionalKeyword() || rval.IsValid() {
-		val = proto.Bool(rval.Bool())
+		val = rval.Bool()
+	} else {
+		hasValue = false
 	}
-	match, err := f.GetBool().Match(val)
+	match, err := matchBoolFilter(f.GetBool(), val, hasValue)
 	return checkNot(f, match, err)
 }
 
@@ -208,10 +215,9 @@ func matchTime(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) (boo
 	if !rval.IsValid() {
 		return checkNot(f, false, nil)
 	}
-	match, err := f.GetTime().Match(&timestamppb.Timestamp{
-		Seconds: rval.Message().Get(fd.Message().Fields().Get(0)).Int(),
-		Nanos:   int32(rval.Message().Get(fd.Message().Fields().Get(1)).Int()),
-	})
+	seconds := rval.Message().Get(fd.Message().Fields().Get(0)).Int()
+	nanos := int32(rval.Message().Get(fd.Message().Fields().Get(1)).Int())
+	match, err := matchTimeFilter(f.GetTime(), seconds, nanos, true)
 	return checkNot(f, match, err)
 }
 
@@ -222,13 +228,133 @@ func matchDuration(rval pref.Value, fd pref.FieldDescriptor, f *filters.Filter) 
 	if !rval.IsValid() {
 		return checkNot(f, false, nil)
 	}
-	rval.Message().Get(fd.Message().Fields().Get(0))
-
-	match, err := f.GetDuration().Match(&durationpb.Duration{
-		Seconds: rval.Message().Get(fd.Message().Fields().Get(0)).Int(),
-		Nanos:   int32(rval.Message().Get(fd.Message().Fields().Get(1)).Int()),
-	})
+	seconds := rval.Message().Get(fd.Message().Fields().Get(0)).Int()
+	nanos := int32(rval.Message().Get(fd.Message().Fields().Get(1)).Int())
+	match, err := matchDurationFilter(f.GetDuration(), seconds, nanos, true)
 	return checkNot(f, match, err)
+}
+
+func matchStringFilter(f *filters.StringFilter, value string, hasValue bool) (bool, error) {
+	if !hasValue {
+		return false, nil
+	}
+	insensitive := f.GetCaseInsensitive()
+	switch f.GetCondition().(type) {
+	case *filters.StringFilter_Equals:
+		if insensitive {
+			return strings.EqualFold(f.GetEquals(), value), nil
+		}
+		return value == f.GetEquals(), nil
+	case *filters.StringFilter_HasPrefix:
+		if insensitive {
+			return strings.HasPrefix(strings.ToLower(value), strings.ToLower(f.GetHasPrefix())), nil
+		}
+		return strings.HasPrefix(value, f.GetHasPrefix()), nil
+	case *filters.StringFilter_HasSuffix:
+		if insensitive {
+			return strings.HasSuffix(strings.ToLower(value), strings.ToLower(f.GetHasSuffix())), nil
+		}
+		return strings.HasSuffix(value, f.GetHasSuffix()), nil
+	case *filters.StringFilter_Regex:
+		reg, err := regexp.Compile(f.GetRegex())
+		if err != nil {
+			return false, err
+		}
+		return reg.MatchString(value), nil
+	case *filters.StringFilter_In_:
+		for _, v := range f.GetIn().GetValues() {
+			if (insensitive && strings.EqualFold(v, value)) || v == value {
+				return true, nil
+			}
+		}
+	case *filters.StringFilter_Inf:
+		if insensitive {
+			return strings.ToLower(value) < strings.ToLower(f.GetInf()), nil
+		}
+		return value < f.GetInf(), nil
+	case *filters.StringFilter_Sup:
+		if insensitive {
+			return strings.ToLower(value) > strings.ToLower(f.GetSup()), nil
+		}
+		return value > f.GetSup(), nil
+	}
+	return false, nil
+}
+
+func matchNumberFilter(f *filters.NumberFilter, value float64, hasValue bool) (bool, error) {
+	if !hasValue {
+		return false, nil
+	}
+	switch f.GetCondition().(type) {
+	case *filters.NumberFilter_Equals:
+		return value == f.GetEquals(), nil
+	case *filters.NumberFilter_Inf:
+		return value < f.GetInf(), nil
+	case *filters.NumberFilter_Sup:
+		return value > f.GetSup(), nil
+	case *filters.NumberFilter_In_:
+		for _, v := range f.GetIn().GetValues() {
+			if value == v {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func matchBoolFilter(f *filters.BoolFilter, value bool, hasValue bool) (bool, error) {
+	if !hasValue {
+		return false, nil
+	}
+	return value == f.GetEquals(), nil
+}
+
+func matchTimeFilter(f *filters.TimeFilter, seconds int64, nanos int32, hasValue bool) (bool, error) {
+	if !hasValue {
+		return false, nil
+	}
+	switch f.GetCondition().(type) {
+	case *filters.TimeFilter_Equals:
+		t := f.GetEquals()
+		return seconds == t.GetSeconds() && nanos == t.GetNanos(), nil
+	case *filters.TimeFilter_Before:
+		t := f.GetBefore()
+		if seconds != t.GetSeconds() {
+			return seconds < t.GetSeconds(), nil
+		}
+		return nanos < t.GetNanos(), nil
+	case *filters.TimeFilter_After:
+		t := f.GetAfter()
+		if seconds != t.GetSeconds() {
+			return seconds > t.GetSeconds(), nil
+		}
+		return nanos > t.GetNanos(), nil
+	}
+	return false, nil
+}
+
+func matchDurationFilter(f *filters.DurationFilter, seconds int64, nanos int32, hasValue bool) (bool, error) {
+	if !hasValue {
+		return false, nil
+	}
+	switch f.GetCondition().(type) {
+	case *filters.DurationFilter_Equals:
+		d := f.GetEquals()
+		return seconds == d.GetSeconds() && nanos == d.GetNanos(), nil
+	case *filters.DurationFilter_Inf:
+		d := f.GetInf()
+		if seconds != d.GetSeconds() {
+			return seconds < d.GetSeconds(), nil
+		}
+		return nanos < d.GetNanos(), nil
+	case *filters.DurationFilter_Sup:
+		d := f.GetSup()
+		if seconds != d.GetSeconds() {
+			return seconds > d.GetSeconds(), nil
+		}
+		return nanos > d.GetNanos(), nil
+	}
+	return false, nil
 }
 
 func checkNot(f *filters.Filter, match bool, err error) (bool, error) {

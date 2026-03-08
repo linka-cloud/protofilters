@@ -84,6 +84,45 @@ func BenchmarkIndexFind(b *testing.B) {
 	})
 }
 
+func BenchmarkUIDIndexFind1M(b *testing.B) {
+	benchmarkUIDIndexFindWithOptions1M(b, FindOptions{})
+}
+
+func BenchmarkUIDIndexFindLimit1001M(b *testing.B) {
+	benchmarkUIDIndexFindWithOptions1M(b, FindOptions{Limit: 100})
+}
+
+func BenchmarkUIDIndexFindReverse1M(b *testing.B) {
+	benchmarkUIDIndexFindWithOptions1M(b, FindOptions{Reverse: true})
+}
+
+func BenchmarkUIDIndexFindOffset10000Limit1001M(b *testing.B) {
+	benchmarkUIDIndexFindWithOptions1M(b, FindOptions{Offset: 10_000, Limit: 100})
+}
+
+func benchmarkUIDIndexFindWithOptions1M(b *testing.B, opts FindOptions) {
+	ctx := context.Background()
+	const total = 1_000_000
+	const matchEvery = 10
+
+	filter := filters.Where("string_field").StringEquals("match")
+	uidIndex := benchmarkBuildUIDIndex(b, ctx, total, matchEvery)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		count := 0
+		for uid, err := range uidIndex.Find(ctx, "linka.cloud.test.Test", filter, opts) {
+			if err != nil {
+				b.Fatal(err)
+			}
+			benchUIDSink = uid
+			count++
+		}
+		benchKeysSink = count
+	}
+}
+
 func benchmarkBuildKeyIndex(b *testing.B, ctx context.Context, total, matchEvery int) Index {
 	b.Helper()
 	i := New(nil, All)

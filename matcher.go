@@ -48,7 +48,7 @@ type CachingMatcher interface {
 
 // NewMatcher creates a CachingMatcher
 func NewMatcher() CachingMatcher {
-	return &matcher{cache: make(map[string][]pref.FieldDescriptor)}
+	return &matcher{cache: make(map[pref.FullName]map[string][]pref.FieldDescriptor)}
 }
 
 var defaultMatcher = NewMatcher()
@@ -70,7 +70,7 @@ func MatchExpression(msg proto.Message, expr *filters.Expression) (bool, error) 
 
 type matcher struct {
 	mu    sync.RWMutex
-	cache map[string][]pref.FieldDescriptor
+	cache map[pref.FullName]map[string][]pref.FieldDescriptor
 }
 
 // Deprecated: MatchExpression match proto.Message against the given expression, Match should be used instead
@@ -85,36 +85,41 @@ func (m *matcher) Match(msg proto.Message, f filters.FieldFilterer) (bool, error
 	if f == nil || f.Expr() == nil {
 		return true, nil
 	}
-	expr := f.Expr()
-	ok, err := m.match(msg, filters.New(expr.Condition))
+	return m.matchExpression(msg, f.Expr())
+}
+
+func (m *matcher) matchExpression(msg proto.Message, expr *filters.Expression) (bool, error) {
+	ok, err := m.matchFieldFilter(msg, expr.Condition)
 	if err != nil {
 		return false, err
 	}
-	if len(expr.OrExprs) == 0 && !ok {
+	if !ok && len(expr.OrExprs) == 0 {
 		return false, nil
 	}
-	andOk := true
-	for _, v := range expr.AndExprs {
-		andOk, err = m.Match(msg, v)
-		if err != nil {
-			return false, err
-		}
-		if !andOk {
-			break
+	if ok {
+		for _, v := range expr.AndExprs {
+			ok, err = m.matchExpression(msg, v)
+			if err != nil {
+				return false, err
+			}
+			if !ok {
+				break
+			}
 		}
 	}
-	orOk := false
+	if ok {
+		return true, nil
+	}
 	for _, v := range expr.OrExprs {
-		orOk, err = m.Match(msg, v)
+		ok, err = m.matchExpression(msg, v)
 		if err != nil {
 			return false, err
 		}
-		if orOk {
-			break
+		if ok {
+			return true, nil
 		}
 	}
-
-	return ok && andOk || orOk, nil
+	return false, nil
 }
 
 type result struct {
@@ -135,7 +140,7 @@ func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error
 	}
 
 	for path, filter := range f.Filters {
-		ok, err := m.matchFilter(msg, path, filter)
+		ok, err := m.matchFieldFilter(msg, &filters.FieldFilter{Field: path, Filter: filter})
 		if err != nil {
 			return false, err
 		}
@@ -144,6 +149,13 @@ func (m *matcher) match(msg proto.Message, f *filters.FieldsFilter) (bool, error
 		}
 	}
 	return true, nil
+}
+
+func (m *matcher) matchFieldFilter(msg proto.Message, ff *filters.FieldFilter) (bool, error) {
+	if ff == nil {
+		return true, nil
+	}
+	return m.matchFilter(msg, ff.Field, ff.Filter)
 }
 
 func (m *matcher) doMatch(msg pref.Message, filter *filters.Filter, fds []pref.FieldDescriptor, iterating bool) (bool, error) {
@@ -219,25 +231,37 @@ func (m *matcher) matchFilter(msg proto.Message, path string, filter *filters.Fi
 }
 
 func (m *matcher) MatchFilters(msg proto.Message, fs ...*filters.FieldFilter) (bool, error) {
-	f := filters.New(fs...)
-	return m.match(msg, f)
+	if msg == nil {
+		return false, errors.New("message is null")
+	}
+	for _, ff := range fs {
+		ok, err := m.matchFieldFilter(msg, ff)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (m *matcher) Clear() {
 	m.mu.Lock()
-	m.cache = make(map[string][]pref.FieldDescriptor)
+	m.cache = make(map[pref.FullName]map[string][]pref.FieldDescriptor)
 	m.mu.Unlock()
 }
 
 func (m *matcher) lookup(msg proto.Message, path string) ([]pref.FieldDescriptor, error) {
 	if m.cache == nil {
 		m.mu.Lock()
-		m.cache = make(map[string][]pref.FieldDescriptor)
+		m.cache = make(map[pref.FullName]map[string][]pref.FieldDescriptor)
 		m.mu.Unlock()
 	}
-	key := string(msg.ProtoReflect().Descriptor().FullName()) + "." + path
+	typ := msg.ProtoReflect().Descriptor().FullName()
 	m.mu.RLock()
-	fd, ok := m.cache[key]
+	fields := m.cache[typ]
+	fd, ok := fields[path]
 	m.mu.RUnlock()
 	if ok {
 		return fd, nil
@@ -247,7 +271,10 @@ func (m *matcher) lookup(msg proto.Message, path string) ([]pref.FieldDescriptor
 		return nil, err
 	}
 	m.mu.Lock()
-	m.cache[key] = fds
+	if m.cache[typ] == nil {
+		m.cache[typ] = make(map[string][]pref.FieldDescriptor)
+	}
+	m.cache[typ][path] = fds
 	m.mu.Unlock()
 	return fds, nil
 }
