@@ -7,6 +7,9 @@ package filters
 import (
 	binary "encoding/binary"
 	fmt "fmt"
+	io "io"
+	math "math"
+
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	durationpb1 "github.com/planetscale/vtprotobuf/types/known/durationpb"
 	timestamppb1 "github.com/planetscale/vtprotobuf/types/known/timestamppb"
@@ -14,8 +17,6 @@ import (
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	io "io"
-	math "math"
 )
 
 const (

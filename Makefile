@@ -20,19 +20,16 @@ export GOBIN=$(PWD)/.bin
 
 export PATH := $(GOBIN):$(PATH)
 
-PROTO_BASE_PATH = $(PWD)
-
-INCLUDE_PROTO_PATH = -I$(PROTO_BASE_PATH) \
-	-I $(shell go list -m -f {{.Dir}} google.golang.org/protobuf)
-
 bin:
-	@go install google.golang.org/protobuf/cmd/protoc-gen-go
-	@go install github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto
-	@go install golang.org/x/tools/cmd/goimports
+	@go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
+	@go install github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto@v0.6.0
+	@go install go.linka.cloud/protoc-gen-go-fields@main
+	@go install github.com/bufbuild/buf/cmd/buf@v1.45.0
+	@go install golang.org/x/tools/cmd/goimports@latest
 
 clean:
 	@rm -rf .bin
-	@find $(PROTO_BASE_PATH) -name '*.pb*.go' -type f -exec rm {} \;
+	@find $(PWD) -name '*.pb*.go' -type f -exec rm {} \;
 
 
 .PHONY: proto
@@ -40,10 +37,7 @@ proto: gen-proto lint
 
 .PHONY: gen-proto
 gen-proto: bin
-	@find $(PROTO_BASE_PATH) -name '*.proto' -type f -exec \
-    	protoc $(INCLUDE_PROTO_PATH) \
-    		--go-vtproto_out=features=marshal+unmarshal+size+clone,paths=source_relative:. \
-    		--go_out=paths=source_relative:. {} \;
+	@buf generate
 
 .PHONY: lint
 lint:

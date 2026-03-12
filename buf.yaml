@@ -1,0 +1,9 @@
+version: v2
+modules:
+- path: .
+  name: buf.build/linka-cloud/protofilters
+  includes:
+  - filters
+- path: .
+  excludes:
+  - filters
