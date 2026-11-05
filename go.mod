@@ -1,6 +1,10 @@
 module go.linka.cloud/protofilters
 
-go 1.24.0
+go 1.25
+
+ignore (
+	./.mise
+)
 
 require (
 	github.com/RoaringBitmap/roaring/v2 v2.14.4

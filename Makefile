@@ -14,34 +14,26 @@
 
 MODULE = go.linka.cloud/protofilters
 
-$(shell mkdir -p .bin)
+SHELL := $(CURDIR)/bin/mise
+.SHELLFLAGS := exec -- /bin/sh -c
 
-export GOBIN=$(PWD)/.bin
-
-export PATH := $(GOBIN):$(PATH)
-
+.PHONY: bin
 bin:
-	@go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
-	@go install github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto@v0.6.0
-	@go install go.linka.cloud/protoc-gen-go-fields@main
-	@go install github.com/bufbuild/buf/cmd/buf@v1.45.0
-	@go install golang.org/x/tools/cmd/goimports@latest
+	@bin/mise install --locked
 
 clean:
-	@rm -rf .bin
 	@find $(PWD) -name '*.pb*.go' -type f -exec rm {} \;
-
 
 .PHONY: proto
 proto: gen-proto lint
 
 .PHONY: gen-proto
 gen-proto: bin
-	@buf generate
+	@buf generate --disable-symlinks
 
 .PHONY: lint
 lint:
-	@goimports -w -local $(MODULE) $(PWD)
+	@goimports -w -local $(MODULE) $$(find . -type d -name '.mise' -prune -o -type f -name '*.go' -print)
 	@go fmt $(PWD)
 
 .PHONY: tests

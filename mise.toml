@@ -1,0 +1,8 @@
+[tools]
+buf = "latest"
+go = "latest"
+"go:github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto" = "latest"
+"go:go.linka.cloud/protoc-gen-go-fields" = "5ed55c0"
+"go:golang.org/x/tools/cmd/goimports" = "latest"
+protoc = "latest"
+protoc-gen-go = "latest"

@@ -6,4 +6,5 @@ modules:
   - filters
 - path: .
   excludes:
+  - .mise
   - filters
